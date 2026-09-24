@@ -136,6 +136,27 @@
         "type": "github"
       }
     },
+    "lightwave-cli": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1790269428,
+        "narHash": "sha256-o/lxBpMxuKyvUIpACjllzSWNEmQGwJcS+1BrHWh7BaY=",
+        "owner": "lightwave-media",
+        "repo": "lightwave-cli",
+        "rev": "7f8a2e496a99926f79c19d02a4466e3ebed2a736",
+        "type": "github"
+      },
+      "original": {
+        "owner": "lightwave-media",
+        "ref": "v3.16.1",
+        "repo": "lightwave-cli",
+        "type": "github"
+      }
+    },
     "nix": {
       "inputs": {
         "flake-parts": "flake-parts",
@@ -258,6 +279,7 @@
       "inputs": {
         "determinate": "determinate",
         "home-manager": "home-manager",
+        "lightwave-cli": "lightwave-cli",
         "nix-darwin": "nix-darwin",
         "nixpkgs": "nixpkgs_3"
       }
