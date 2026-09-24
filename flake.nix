@@ -18,7 +18,7 @@
     # Deliberately NOT in home.packages: two copies of lw on PATH, with a
     # different winner per shell type, is the drift this repo exists to
     # remove. Roll lw forward by bumping the tag and re-locking.
-    lightwave-cli.url = "github:lightwave-media/lightwave-cli/v3.16.0";
+    lightwave-cli.url = "github:lightwave-media/lightwave-cli/v3.16.1";
     lightwave-cli.inputs.nixpkgs.follows = "nixpkgs";
   };
 
