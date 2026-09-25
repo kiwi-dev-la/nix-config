@@ -1,6 +1,9 @@
 { pkgs, ... }:
 
 {
+  # Homebrew is managed from here, holding only what Nix cannot provide yet.
+  imports = [ ./homebrew.nix ];
+
   nixpkgs.hostPlatform = "aarch64-darwin";
   nixpkgs.config.allowUnfree = true;
 
