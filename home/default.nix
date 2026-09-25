@@ -1,14 +1,11 @@
 { pkgs, ... }:
 
 {
+  imports = [ ./packages.nix ];
+
   home.username = "joelschaeffer";
   home.homeDirectory = "/Users/joelschaeffer";
   home.stateVersion = "25.11";
-
-  home.packages = with pkgs; [
-    nil
-    nixfmt
-  ];
 
   home.sessionVariables = {
     GOPATH = "/Users/joelschaeffer/.local/share/go";

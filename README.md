@@ -80,9 +80,13 @@ finds no configuration instead of applying this one.
 Beyond the files above: `/etc/static`, `/run/current-system`, the
 `org.nixos.activate-system` LaunchDaemon (runs once when loaded and again
 at every boot), an empty `/Applications/Nix Apps`,
-`/etc/profiles/per-user/joelschaeffer` (git, nil, nixfmt, direnv, man-db,
-and an `hm-session-vars.sh` carrying GOPATH, GOBIN and GOMODCACHE at their
-current values), and the macOS HostName (LocalHostName already matches).
+`/etc/profiles/per-user/joelschaeffer` (every tool in `home/packages.nix`,
+plus git, direnv, man-db, and an `hm-session-vars.sh` carrying GOPATH, GOBIN
+and GOMODCACHE at their current values), and the macOS HostName
+(LocalHostName already matches). Activation also runs `brew bundle` for
+`hosts/homebrew.nix`: it installs any declared formula or cask that is
+missing and removes nothing (`cleanup = "none"`), updates nothing
+(`autoUpdate`/`upgrade` off), and starts no service.
 In the home directory it creates `~/.config/git/config` and
 `~/.config/direnv/lib/hm-nix-direnv.sh` as store symlinks, `.keep` markers
 in `~/.cache` and `~/.local/state`, a gc-root under
@@ -121,10 +125,43 @@ working throughout: with `nix.enable = false` nix-darwin ships no
 `/etc/nix/nix.conf` and no `org.nixos.nix-daemon`, and never touches
 `systems.determinate.nix-daemon`.
 
+## Packages: Nix is the package manager
+
+Nix is the Lightwave package manager for every environment, this Mac
+included. A tool that is missing or outdated goes into `home/packages.nix`
+(or a repo flake's devShell). It never goes to `brew install` or
+`brew upgrade`. An upgrade is a re-lock of `nixpkgs`, and when nixpkgs lags
+upstream, the nixpkgs version is what we run.
+
+Homebrew is managed from here, in `hosts/homebrew.nix`, and holds only what
+nixpkgs cannot provide yet (a few taps, GUI casks) plus the daemons that run
+from Homebrew today (Postgres + pgvector, Redis, Ollama, Tailscale, Forgejo).
+Phase 1 (2026-09-25) moved 68 of the 90 formulae to Nix and removed nothing.
+Of the rest, 16 are declared here and 6 are dropped as unused or duplicated.
+
+Phase 2, before `cleanup = "uninstall"` can be turned on:
+
+- **PATH order.** `~/.zprofile` runs `brew shellenv`, which puts
+  `/opt/homebrew/bin` first, so login shells still find the Homebrew copy of
+  a tool before the Nix one. Dotfiles are out of scope for this config until
+  the launchd and dotfile owners agree, so this is a manual edit: drop the
+  `brew shellenv` line, or move it below the Nix profile.
+- **Launchd agents** under `~/Library/LaunchAgents` put `/opt/homebrew/bin`
+  on PATH. Repoint them at `/etc/profiles/per-user/joelschaeffer/bin` before
+  any formula is uninstalled.
+- **mise's global tools** (fzf, tmux, python, gopls, golangci-lint) shadow
+  both on PATH. Per-repo `mise.toml` pins stay; global installs move here.
+- **The Homebrew `lw`** (from the deleted `lightwave-media/tap`) is a stale
+  second copy; `lw` comes from this flake's `lightwave-cli` input.
+- **checkov** stays a Homebrew formula: nixpkgs refuses it over an insecure
+  dependency (CVE-2024-23342), and no repo uses it.
+
 ## Layout
 
 ```
-flake.nix           inputs + darwinConfigurations
+flake.nix               inputs + darwinConfigurations
 hosts/macbook-pro.nix   nix-darwin (the Mac)
+hosts/homebrew.nix      Homebrew, managed by Nix: only what Nix cannot provide
 home/default.nix        home-manager (the user)
+home/packages.nix       every CLI tool
 ```
