@@ -143,16 +143,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1790269428,
-        "narHash": "sha256-o/lxBpMxuKyvUIpACjllzSWNEmQGwJcS+1BrHWh7BaY=",
+        "lastModified": 1790311139,
+        "narHash": "sha256-/xiNpRGnuZwkZEWipbBRdCoJ6ljg3UuQ9A31l8Sw/Ds=",
         "owner": "lightwave-media",
         "repo": "lightwave-cli",
-        "rev": "7f8a2e496a99926f79c19d02a4466e3ebed2a736",
+        "rev": "4ab3b94c6cbb1e9ce99c841713733941d6affbba",
         "type": "github"
       },
       "original": {
         "owner": "lightwave-media",
-        "ref": "v3.16.1",
+        "ref": "v3.17.1",
         "repo": "lightwave-cli",
         "type": "github"
       }
