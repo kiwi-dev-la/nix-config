@@ -55,6 +55,26 @@ flake, not in that file. `/run` does not exist on this Mac yet; activation
 creates it itself (a `run` line in `/etc/synthetic.conf` plus
 `apfs.util -t`).
 
+### 1b. Copy the plists this generation replaces into the archive
+
+`hosts/launchd-agents.nix` keeps each replaced job's Label. On the switch,
+nix-darwin unloads a same-label plist and copies its own over it, so the old
+file would be lost. Copy them out first; nothing is ever deleted:
+
+```bash
+for l in com.lightwave.forgejo com.lightwave.forgejo-runner homebrew.mxcl.postgresql@17 \
+         com.lightwave.webhook com.lightwave.whatsapp-bridge com.joelschaeffer.sysmon; do
+  cp -p ~/Library/LaunchAgents/$l.plist \
+    ~/.lightwave/observability/archive/launchd.$l.before-nix-darwin.plist
+done
+```
+
+Jobs whose label disappears (`com.ollama.serve`, `com.lightwave.gh-notif-signal`,
+and the four whose scripts no longer exist: `com.joelschaeffer.documentcleanup`,
+`com.joelschaeffer.nasarchive`, `com.joelschaeffer.memory-gc`,
+`com.lightwave.org-sync`) are retired after the switch with
+`nix run .#archive-launchd`.
+
 ### 2. Build first, activate second
 
 Building writes only to the Nix store:
@@ -92,8 +112,8 @@ In the home directory it creates `~/.config/git/config` and
 in `~/.cache` and `~/.local/state`, a gc-root under
 `~/.local/state/home-manager`, and the empty `~/Applications/Home Manager
 Apps` and `~/Library/Fonts/HomeManager`. `~/.gitconfig` stays and wins over
-`~/.config/git/config` on any key both set. It declares no launchd agents,
-creates no user, leaves the login shell at `/bin/zsh`, and touches no
+`~/.config/git/config` on any key both set. It replaces six launchd agents
+in place (`hosts/launchd-agents.nix`, step 1b), creates no user, leaves the login shell at `/bin/zsh`, and touches no
 existing dotfile.
 
 The one behavioural change to plan for: nix-darwin's `/etc/zshenv` sets
