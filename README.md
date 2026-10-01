@@ -63,7 +63,8 @@ file would be lost. Copy them out first; nothing is ever deleted:
 
 ```bash
 for l in com.lightwave.forgejo com.lightwave.forgejo-runner homebrew.mxcl.postgresql@17 \
-         com.lightwave.webhook com.lightwave.whatsapp-bridge com.joelschaeffer.sysmon; do
+         com.lightwave.webhook com.lightwave.whatsapp-bridge com.joelschaeffer.sysmon \
+         com.nullhub.server com.lightwave.obs.prometheus com.lightwave.obs.grafana; do
   cp -p ~/Library/LaunchAgents/$l.plist \
     ~/.lightwave/observability/archive/launchd.$l.before-nix-darwin.plist
 done
@@ -112,7 +113,7 @@ In the home directory it creates `~/.config/git/config` and
 in `~/.cache` and `~/.local/state`, a gc-root under
 `~/.local/state/home-manager`, and the empty `~/Applications/Home Manager
 Apps` and `~/Library/Fonts/HomeManager`. `~/.gitconfig` stays and wins over
-`~/.config/git/config` on any key both set. It replaces six launchd agents
+`~/.config/git/config` on any key both set. It replaces nine launchd agents
 in place (`hosts/launchd-agents.nix`, step 1b), creates no user, leaves the login shell at `/bin/zsh`, and touches no
 existing dotfile.
 
