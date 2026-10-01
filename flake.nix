@@ -31,9 +31,20 @@
     # forward by bumping the tag and re-locking, same as lightwave-cli.
     lightwave-core.url = "git+ssh://git@github.com/lightwave-media/lightwave-core?ref=refs/tags/v0.9.1";
     lightwave-core.inputs.nixpkgs.follows = "nixpkgs";
+
+    # nullhub and the observability stack, built from lightwave-ai so the
+    # launchd jobs run store paths instead of scripts in a worktree. Private
+    # repo, so git+ssh. Not following our nixpkgs: the Zig toolchain is pinned
+    # by lightwave-ai's own lock. Roll forward by re-locking.
+    # Fetching needs an SSH key that can read lightwave-media's private repos:
+    # today Joel's ssh agent, which is enough for an interactive switch. No
+    # deploy key exists yet, so an unattended build (a cron rebuild, the Mac
+    # Studio) fails closed until one is issued. lightwave-core above is the same.
+    lightwave-ai.url = "git+ssh://git@github.com/lightwave-media/lightwave-ai?ref=main";
+    lightwave-ai-obs.url = "git+ssh://git@github.com/lightwave-media/lightwave-ai?ref=main&dir=nix/observability";
   };
 
-  outputs = { self, nixpkgs, nix-darwin, home-manager, determinate, lightwave-cli, lightwave-core, ... }: {
+  outputs = { self, nixpkgs, nix-darwin, home-manager, determinate, lightwave-cli, lightwave-core, lightwave-ai, lightwave-ai-obs, ... }: {
     # `nix build .#lw` builds exactly the lw this host pins; lw:sync targets it.
     packages.aarch64-darwin.lw = lightwave-cli.packages.aarch64-darwin.lw;
     # `nix build .#schemas` is the pinned schema tree; per-invocation only.
@@ -53,7 +64,11 @@
     darwinConfigurations."Joels-MacBook-Pro" = nix-darwin.lib.darwinSystem {
       system = "aarch64-darwin";
       # The pinned lw, for launchd jobs that inject secrets with `lw config exec`.
-      specialArgs.lw = lightwave-cli.packages.aarch64-darwin.lw;
+      specialArgs = {
+        lw = lightwave-cli.packages.aarch64-darwin.lw;
+        nullhub = lightwave-ai.packages.aarch64-darwin.nullhub;
+        obs = lightwave-ai-obs.packages.aarch64-darwin;
+      };
       modules = [
         determinate.darwinModules.default
         ./hosts/macbook-pro.nix

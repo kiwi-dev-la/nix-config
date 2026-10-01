@@ -1,4 +1,4 @@
-{ pkgs, lw, ... }:
+{ pkgs, lw, nullhub, obs, ... }:
 
 # The laptop's always-on and personal launchd jobs, declared here instead of
 # hand-written into ~/Library/LaunchAgents (Joel, 2026-10-01: nothing persistent
@@ -11,8 +11,8 @@
 # switch"); labels that disappear are retired with `nix run .#archive-launchd`.
 #
 # Cron-style jobs are not here: they come from core's cron_job stamps through
-# `lw cron sync`. nullhub, Prometheus and Grafana wait for lightwave-ai to
-# export them as flake packages; today they run scripts out of a worktree.
+# `lw cron sync`. nullhub, Prometheus and Grafana run lightwave-ai's flake
+# packages instead of scripts out of a worktree.
 
 let
   home = "/Users/joelschaeffer";
@@ -82,6 +82,46 @@ in
           NULLTICKETS_URL = "http://127.0.0.1:7700";
           NULLTICKETS_GITHUB_PIPELINE_ID = "b3103d31-e592-4e51-a3b1-3c6d3ed5e8aa";
         };
+      };
+
+    # owner: v_lightwave-ai-engineer. One hub only: the label is unchanged, so
+    # the switch replaces the hand-made job; never load both. Runs from
+    # ~/.nullhub, not the worktree, so the hub no longer re-stages instance
+    # binaries from <cwd>/../<component>/zig-out/bin; deploys are explicit
+    # copies. PATH must resolve `claude` (Max login) or the claude-cli
+    # provider silently falls back to OpenRouter. Never set ANTHROPIC_API_KEY.
+    nullhub = service "com.nullhub.server"
+      [
+        "${lw}/bin/lw" "config" "exec" "--only" "OPENROUTER_API_KEY,NULLTICKETS_API_TOKEN" "--"
+        "${nullhub}/bin/nullhub" "serve" "--no-open"
+      ]
+      {
+        WorkingDirectory = "${home}/.nullhub";
+        StandardOutPath = "${logs}/nullhub.stdout.log";
+        StandardErrorPath = "${logs}/nullhub.stderr.log";
+        ThrottleInterval = 30;
+        EnvironmentVariables = {
+          PATH = "${home}/.local/bin:${home}/.local/share/mise/shims:${path}";
+          HOME = home;
+          AWS_PROFILE = "lightwave-agent";
+        };
+      };
+
+    # owner: v_devops. 127.0.0.1:9090; state under LW_OBS_HOME's default,
+    # ~/.lightwave/runtime/observability.
+    prometheus = service "com.lightwave.obs.prometheus"
+      [ "${obs.obs-prometheus}/bin/obs-prometheus" ]
+      {
+        StandardOutPath = "${logs}/obs.prometheus.stdout.log";
+        StandardErrorPath = "${logs}/obs.prometheus.stderr.log";
+      };
+
+    # owner: v_devops. 127.0.0.1:3200.
+    grafana = service "com.lightwave.obs.grafana"
+      [ "${obs.obs-grafana}/bin/obs-grafana" ]
+      {
+        StandardOutPath = "${logs}/obs.grafana.stdout.log";
+        StandardErrorPath = "${logs}/obs.grafana.stderr.log";
       };
 
     # owner: Joel. Same script, Nix-pinned bash instead of macOS's 3.2.
