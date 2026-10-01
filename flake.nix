@@ -39,6 +39,17 @@
     # `nix build .#schemas` is the pinned schema tree; per-invocation only.
     packages.aarch64-darwin.schemas = lightwave-core.packages.aarch64-darwin.schemas;
 
+    # Retires a hand-written launchd job only after its nix-darwin replacement
+    # is installed and has run. Dry run unless given --apply.
+    apps.aarch64-darwin.archive-launchd = {
+      type = "app";
+      program = "${nixpkgs.legacyPackages.aarch64-darwin.writeShellApplication {
+        name = "archive-launchd";
+        runtimeInputs = [ nixpkgs.legacyPackages.aarch64-darwin.coreutils ];
+        text = builtins.readFile ./scripts/archive-launchd.sh;
+      }}/bin/archive-launchd";
+    };
+
     darwinConfigurations."Joels-MacBook-Pro" = nix-darwin.lib.darwinSystem {
       system = "aarch64-darwin";
       modules = [
