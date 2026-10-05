@@ -29,7 +29,7 @@ git init -q -b main repo
 git init -q --bare remote.git
 cd repo
 git config user.name tester
-git remote add origin ../remote.git
+git remote add origin "$work/remote.git"
 allowed git commit --allow-empty -m "first"
 allowed git push -u origin main
 
@@ -78,10 +78,12 @@ git add config.txt
 allowed git commit -m "add config"
 blocked git push origin main
 (cd "$work" && blocked git -C repo push origin main)
+# GitButler pushes from inside the git directory: the scan must still run there.
+(cd .git && blocked git push origin main)
 git rm -q --cached config.txt
 rm config.txt
 allowed git commit --amend --allow-empty -m "add nothing"
-allowed git push origin main
+(cd .git && allowed git push origin main)
 
 # An agent commits as its persona.
 AGENT_PERSONA=v_test git commit -q --allow-empty -m "as persona"

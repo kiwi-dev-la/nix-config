@@ -14,7 +14,7 @@ let
     # The nixpkgs builds of these two are months behind and cannot update
     # themselves; the vendor builds are signed and current.
     "Notion"            # notion.com/desktop
-    "GitButler"         # gitbutler.com (includes the `but` command-line tool)
+    "GitButler"         # gitbutler.com/install.sh (README step 6); also brings `but`
   ];
 in
 {

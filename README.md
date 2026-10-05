@@ -18,6 +18,9 @@ cannot supply well are installed from the vendor and listed in
 
 4. Open a new Terminal window. From then on, `rebuild` applies changes.
 5. `gh auth login` (choose HTTPS) so git can clone and push your private repos.
+6. `curl -fsSL https://gitbutler.com/install.sh | sh` installs GitButler into
+   `~/Applications` and its `but` command into `~/.local/bin`. nixpkgs has no
+   macOS build of it. Branches are made with `but`, never with git.
 
 Nix only sees files that git knows about. After adding a new file to this
 repo, run `git add <file>` before `rebuild`.

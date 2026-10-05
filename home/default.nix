@@ -10,6 +10,9 @@
     (lib.hiPrio (import ../rules/git-guard.nix { inherit pkgs lib; }))
   ];
 
+  # Where GitButler's installer puts `but` (README, bootstrap step 6).
+  home.sessionPath = [ "$HOME/.local/bin" ];
+
   # `gh auth login` once (HTTPS); gh then signs git in for clone and push.
   programs.gh = {
     enable = true;

@@ -97,7 +97,10 @@ case "$sub" in
       deny "an unpushed commit carries AI attribution; reword it before pushing"
     fi
     if [ -n "$unpushed" ]; then
-      root="$("$REAL_GIT" "${globals[@]}" rev-parse --show-toplevel)"
+      # GitButler pushes from inside the git directory, where there is no
+      # work tree to name; the git directory itself scans the same history.
+      root="$("$REAL_GIT" "${globals[@]}" rev-parse --show-toplevel 2>/dev/null ||
+        "$REAL_GIT" "${globals[@]}" rev-parse --absolute-git-dir)"
       scan=0
       PATH="$(dirname "$REAL_GIT"):$PATH" "$GITLEAKS" git "$root" \
         --no-banner --redact --exit-code 3 --log-opts="${range[*]}" >/dev/null 2>&1 || scan=$?
