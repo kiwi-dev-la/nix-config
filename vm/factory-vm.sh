@@ -1,0 +1,184 @@
+# shellcheck shell=bash
+# factory-vm: create and run the factory, a NixOS VM on this Mac.
+# QEMU_SHARE, DEBIAN_IMAGE, FLAKE and FORWARDS are set by vm/default.nix.
+
+usage() {
+  printf '%s\n' '  factory-vm up        create it if it does not exist, start it if it is stopped' >&2
+  printf '%s\n' '  factory-vm status    is it running, and is the system healthy' >&2
+  printf '%s\n' '  factory-vm ssh [..]  shell (or a command) in the VM as joel' >&2
+  printf '%s\n' '  factory-vm switch [flake]   apply a configuration; default is the one this' >&2
+  printf '%s\n' '                              command was built from, or e.g. github:kiwi-dev-la/nix-config' >&2
+  printf '%s\n' '  factory-vm stop      shut it down' >&2
+  printf '%s\n' '  factory-vm destroy --yes    stop it and delete its disk' >&2
+}
+
+STATE="${FACTORY_VM_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/factory-vm}"
+KEY="${FACTORY_VM_KEY:-$HOME/.ssh/factory_ed25519}"
+SSH_PORT="${FACTORY_VM_SSH_PORT:-2222}"
+CPUS="${FACTORY_VM_CPUS:-8}"
+MEMORY="${FACTORY_VM_MEMORY:-16G}"
+DISK_SIZE="${FACTORY_VM_DISK:-200G}"
+# Mac port:VM port pairs, reachable on the Mac at 127.0.0.1 only. Set in vm/default.nix.
+read -r -a forwards <<<"${FACTORY_VM_FORWARDS:-$FORWARDS}"
+
+ssh_opts=(-F /dev/null -p "$SSH_PORT" -i "$KEY" -o IdentitiesOnly=yes -o ConnectTimeout=5 -o LogLevel=ERROR
+  -o UserKnownHostsFile="$STATE/known_hosts")
+
+say() { printf 'factory-vm: %s\n' "$*" >&2; }
+die() { say "$*"; exit 1; }
+
+running() { [[ -f $STATE/qemu.pid ]] && kill -0 "$(<"$STATE/qemu.pid")" 2>/dev/null; }
+
+vm_ssh() { ssh "${ssh_opts[@]}" -o StrictHostKeyChecking=yes "$@"; }
+
+boot() {
+  local net="user,id=net0,hostfwd=tcp:127.0.0.1:$SSH_PORT-:22" pair
+  for pair in "${forwards[@]}"; do
+    net+=",hostfwd=tcp:127.0.0.1:${pair%%:*}-:${pair##*:}"
+  done
+  qemu-system-aarch64 \
+    -name factory -machine virt,accel=hvf -cpu host -smp "$CPUS" -m "$MEMORY" \
+    -drive if=pflash,format=raw,readonly=on,file="$QEMU_SHARE/edk2-aarch64-code.fd" \
+    -drive if=pflash,format=raw,file="$STATE/efi-vars.fd" \
+    -drive if=none,id=root,format=qcow2,file="$STATE/disk.qcow2",discard=unmap \
+    -device virtio-blk-pci,drive=root,serial=factory-root,bootindex=0 \
+    -netdev "$net" \
+    -device virtio-net-pci,netdev=net0 \
+    -device virtio-rng-pci \
+    -display none -serial file:"$STATE/console.log" \
+    -pidfile "$STATE/qemu.pid" -daemonize "$@"
+}
+
+# wait_ssh <user> <seconds> [extra ssh options]
+wait_ssh() {
+  local user=$1 deadline=$((SECONDS + $2))
+  shift 2
+  until ssh "${ssh_opts[@]}" "$@" "$user@127.0.0.1" true 2>/dev/null; do
+    running || die "the VM stopped; see $STATE/console.log"
+    ((SECONDS < deadline)) || die "no SSH from the VM after waiting; see $STATE/console.log"
+    sleep 3
+  done
+}
+
+create() {
+  [[ ! -e $STATE/disk.qcow2 ]] || die "a VM already exists in $STATE"
+  mkdir -p "$STATE"
+  chmod 700 "$STATE"
+  if [[ ! -f $KEY ]]; then
+    say "creating the SSH key $KEY"
+    ssh-keygen -q -t ed25519 -N "" -C factory-vm -f "$KEY"
+  fi
+  local pubkey work
+  pubkey=$(<"$KEY.pub")
+  work=$(mktemp -d)
+
+  # A stock Debian cloud image is only the way in: it boots, takes our key,
+  # and nixos-anywhere replaces it with NixOS built from the flake.
+  say "preparing the disk ($DISK_SIZE, grows as it fills)"
+  cp "$DEBIAN_IMAGE" "$STATE/disk.qcow2"
+  chmod 600 "$STATE/disk.qcow2"
+  qemu-img resize -q "$STATE/disk.qcow2" "$DISK_SIZE"
+  cp "$QEMU_SHARE/edk2-arm-vars.fd" "$STATE/efi-vars.fd"
+  chmod 600 "$STATE/efi-vars.fd"
+
+  mkdir "$work/seed"
+  printf 'instance-id: factory-bootstrap\nlocal-hostname: factory-bootstrap\n' >"$work/seed/meta-data"
+  printf '#cloud-config\nssh_authorized_keys:\n  - %s\n' "$pubkey" >"$work/seed/user-data"
+  xorriso -as mkisofs -quiet -volid cidata -joliet -rock -o "$STATE/seed.iso" "$work/seed"
+
+  say "booting the installer image"
+  boot -drive if=none,id=seed,format=raw,readonly=on,file="$STATE/seed.iso" \
+    -device virtio-blk-pci,drive=seed,serial=factory-seed
+  local loose=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
+  wait_ssh debian 300 "${loose[@]}"
+
+  mkdir -p "$work/files/etc/ssh/authorized_keys.d"
+  printf '%s\n' "$pubkey" >"$work/files/etc/ssh/authorized_keys.d/root"
+  printf '%s\n' "$pubkey" >"$work/files/etc/ssh/authorized_keys.d/joel"
+  chmod -R go-w "$work/files"
+
+  say "installing NixOS from $FLAKE (built inside the VM)"
+  nixos-anywhere --flake "$FLAKE#factory" --build-on remote \
+    --ssh-port "$SSH_PORT" --post-kexec-ssh-port "$SSH_PORT" -i "$KEY" --extra-files "$work/files" \
+    --target-host debian@127.0.0.1
+
+  say "waiting for NixOS to come up"
+  rm -f "$STATE/known_hosts"
+  sleep 10
+  wait_ssh root 600 -o StrictHostKeyChecking=accept-new
+  [[ $(vm_ssh root@127.0.0.1 hostname) == factory ]] || die "the VM came up, but it is not the factory system"
+  rm -rf "$work"
+  say "created"
+}
+
+start() {
+  running && return 0
+  [[ -e $STATE/disk.qcow2 ]] || die "no VM yet; run: factory-vm up"
+  rm -f "$STATE/seed.iso"
+  boot
+  wait_ssh root 300 -o StrictHostKeyChecking=yes
+}
+
+stop() {
+  running || return 0
+  local pid
+  pid=$(<"$STATE/qemu.pid")
+  vm_ssh root@127.0.0.1 systemctl poweroff 2>/dev/null || true
+  for _ in $(seq 60); do
+    kill -0 "$pid" 2>/dev/null || return 0
+    sleep 1
+  done
+  say "the VM did not shut down in 60s; stopping QEMU"
+  kill "$pid"
+}
+
+status() {
+  if ! running; then
+    say "stopped"
+    return 1
+  fi
+  # shellcheck disable=SC2016  # expanded in the VM, not here
+  vm_ssh root@127.0.0.1 '
+    echo "running: $(hostname), NixOS $(nixos-version), up $(($(cut -d. -f1 /proc/uptime) / 60)) min"
+    echo "system state: $(systemctl is-system-running)"
+    systemctl --failed --no-legend
+  '
+}
+
+switch() {
+  running || die "the VM is not running; run: factory-vm up"
+  local ref=${1:-}
+  if [[ -z $ref ]]; then
+    ref=$FLAKE
+    NIX_SSHOPTS="${ssh_opts[*]} -o StrictHostKeyChecking=yes" \
+      nix copy --to "ssh-ng://root@127.0.0.1" "$FLAKE"
+  fi
+  vm_ssh root@127.0.0.1 nixos-rebuild switch --flake "$ref#factory"
+}
+
+case "${1:-}" in
+  up)
+    if [[ ! -e $STATE/disk.qcow2 ]]; then create; else start; fi
+    status
+    ;;
+  status) status ;;
+  ssh)
+    shift
+    exec ssh "${ssh_opts[@]}" -o StrictHostKeyChecking=yes joel@127.0.0.1 "$@"
+    ;;
+  switch)
+    shift
+    switch "$@"
+    ;;
+  stop) stop ;;
+  destroy)
+    [[ ${2:-} == --yes ]] || die "this deletes the VM's disk; run: factory-vm destroy --yes"
+    stop
+    rm -rf "$STATE"
+    say "destroyed"
+    ;;
+  *)
+    usage
+    exit 2
+    ;;
+esac

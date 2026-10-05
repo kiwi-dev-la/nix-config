@@ -9,9 +9,12 @@
 
     home-manager.url = "github:nix-community/home-manager";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
+
+    disko.url = "github:nix-community/disko";
+    disko.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { self, nixpkgs, nix-darwin, home-manager, ... }:
+  outputs = { self, nixpkgs, nix-darwin, home-manager, disko, ... }:
     let
       inherit (nixpkgs) lib;
       forEachSystem = f: lib.genAttrs [ "aarch64-darwin" "x86_64-linux" ]
@@ -36,9 +39,17 @@
         ];
       };
 
+      # The factory: NixOS in a VM on the Mac. `nix run .#factory-vm -- up`
+      nixosConfigurations.factory = lib.nixosSystem {
+        system = "aarch64-linux";
+        modules = [ disko.nixosModules.disko ./machines/factory ];
+      };
+
       packages = forEachSystem (pkgs: {
         git-guard = gitGuard pkgs;
-      } // (forge pkgs).packages);
+      } // (forge pkgs).packages
+        // lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin
+        (import ./vm { inherit pkgs; flake = self; }));
 
       # `nix develop ~/dev/nix-config#forgejo`: the forge, its runner and its commands.
       devShells = forEachSystem (pkgs: {
