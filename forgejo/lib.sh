@@ -22,6 +22,13 @@ api() {
     "$@" "$FORGE_URL/api/v1$path"
 }
 
+# Whether <repo> carries the fleet's CI workflow, byte for byte.
+workflow_path=.forgejo/workflows/ci.yml
+workflow_in_place() {
+  api "/repos/$FORGE_ORG/$1/contents/$workflow_path" 2>/dev/null |
+    jq -r '.content // ""' | base64 --decode 2>/dev/null | cmp --silent - "$FORGE_WORKFLOW"
+}
+
 healthy() {
   curl --fail --silent --max-time 2 "$FORGE_URL/api/healthz" >/dev/null 2>&1
 }

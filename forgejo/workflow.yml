@@ -1,0 +1,24 @@
+# The fleet's CI workflow: the same file in every repo of the forge. It is
+# stamped by `forge-workflows` from kiwi-dev-la/nix-config (forgejo/workflow.yml).
+# Change it there, not here; a copy that differs fails `forge-status`.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# One run per branch or pull request: a newer push replaces the run in flight.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: @RUNS_ON@
+    timeout-minutes: 60
+    steps:
+      # forge-ci is on every runner's PATH. It checks this commit out and runs
+      # the repo's gate, `mise run ci`.
+      - name: mise run ci
+        run: forge-ci

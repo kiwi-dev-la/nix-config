@@ -12,6 +12,8 @@
       linux = [ "native:host" ];   # `runs-on: native`
     };
   };
+  # The runner every repo's CI job asks for. Every gate was written on the Mac.
+  ci.runsOn = "macos";
   # forge-seed copies these from github.com/<githubOrg>.
   githubOrg = "lightwave-media";
   repos = [

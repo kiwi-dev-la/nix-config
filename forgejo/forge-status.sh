@@ -10,4 +10,15 @@ repos="$(api "/orgs/$FORGE_ORG/repos?limit=50" | jq length)"
 runner="$(runner_record | jq -r .status)" ||
   die "UP ($version) but this host's runner is not registered; run forge-bootstrap"
 
-echo "forge: UP $FORGE_URL  forgejo $version  org $FORGE_ORG  repos $repos  runner $runner_name $runner"
+# Every declared repo that is in the forge must carry the fleet's workflow.
+present=0
+stamped=0
+for repo in $FORGE_REPOS; do
+  api "/repos/$FORGE_ORG/$repo" >/dev/null 2>&1 || continue
+  present=$((present + 1))
+  if workflow_in_place "$repo"; then stamped=$((stamped + 1)); fi
+done
+[ "$stamped" = "$present" ] ||
+  die "UP ($version) but $((present - stamped)) of $present repos lack the fleet's CI workflow; run forge-workflows"
+
+echo "forge: UP $FORGE_URL  forgejo $version  org $FORGE_ORG  repos $repos  workflows $stamped/$present  runner $runner_name $runner"

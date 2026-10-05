@@ -23,4 +23,8 @@ cd "$runner_home"
   -e "s|@RUNNER_UUID@|$(cat "$secrets/runner_uuid")|g" \
   "$FORGE_RUNNER_CONFIG" >config.yaml)
 
-exec forgejo-runner daemon --config config.yaml
+# Jobs get the PATH this command was started with, plus forge-ci. They do not
+# get the tools this script itself uses: GNU sed ahead of the system's own
+# would change what a gate runs.
+runner="$(command -v forgejo-runner)"
+exec env PATH="$FORGE_CI_BIN:${PATH#"$FORGE_TOOL_PATH:"}" "$runner" daemon --config config.yaml

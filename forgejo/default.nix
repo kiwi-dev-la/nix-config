@@ -26,9 +26,29 @@ let
     };
   });
 
-  command = name: extraInputs: pkgs.writeShellApplication {
+  # The one workflow every repo carries, with the declared runner filled in.
+  workflow =
+    assert lib.elem forge.ci.runsOn
+      (map (label: builtins.head (lib.splitString ":" label)) (lib.concatLists (lib.attrValues forge.runner.labels)));
+    pkgs.writeText "forge-ci-workflow.yml"
+      (builtins.replaceStrings [ "@RUNS_ON@" ] [ forge.ci.runsOn ] (builtins.readFile ./workflow.yml));
+
+  # The one command that workflow runs. A runner puts it on its jobs' PATH.
+  # The gate gets mise from here and everything else from the runner's host.
+  forge-ci = pkgs.writeShellApplication {
+    name = "forge-ci";
+    runtimeInputs = [ pkgs.mise ];
+    text = ''
+      GIT=${pkgs.git}/bin/git
+      NO_GLOBAL_CONFIG=${pkgs.writeText "mise-global.toml" ""}
+    '' + builtins.readFile ./forge-ci.sh;
+  };
+
+  command = name: extraInputs: let
+    inputs = [ pkgs.curl pkgs.jq pkgs.gnused pkgs.coreutils pkgs.diffutils ] ++ extraInputs;
+  in pkgs.writeShellApplication {
     inherit name;
-    runtimeInputs = [ pkgs.curl pkgs.jq pkgs.gnused pkgs.coreutils ] ++ extraInputs;
+    runtimeInputs = inputs;
     # Every command gets the whole declaration and lib.sh; none uses all of it.
     excludeShellChecks = [ "SC2034" "SC2329" ];
     text = ''
@@ -38,6 +58,9 @@ let
       FORGE_GITHUB_ORG=${forge.githubOrg}
       FORGE_REPOS=${lib.escapeShellArg (lib.concatStringsSep " " forge.repos)}
       FORGE_RUNNER_CONFIG=${runnerConfig}
+      FORGE_WORKFLOW=${workflow}
+      FORGE_CI_BIN=${forge-ci}/bin
+      FORGE_TOOL_PATH=${lib.makeBinPath inputs}
     '' + builtins.readFile ./lib.sh + builtins.readFile (./. + "/${name}.sh");
   };
 
@@ -46,12 +69,15 @@ let
     forge-runner-up = command "forge-runner-up" [ pkgs.forgejo-runner ];
     forge-status = command "forge-status" [ ];
     forge-seed = command "forge-seed" [ pkgs.gh ];
+    forge-workflows = command "forge-workflows" [ ];
   };
 in
 {
   packages = commands // {
-    # The rendered template, to read what the runner is given.
+    inherit forge-ci;
+    # The rendered templates, to read what the runner and the repos are given.
     forge-runner-config = runnerConfig;
+    forge-workflow = workflow;
   };
 
   shell = pkgs.mkShell {
@@ -63,6 +89,7 @@ in
       echo "  forge-bootstrap   this host's token, the org and this host's runner"
       echo "  forge-runner-up   run this host's Actions runner"
       echo "  forge-seed        copy the fleet's repos from GitHub"
+      echo "  forge-workflows   put the fleet's CI workflow in every repo"
       echo "  forge-status      health check"
     '';
   };

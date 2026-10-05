@@ -95,12 +95,24 @@ set up by hand.
 nix develop ~/dev/nix-config#forgejo
 nix run ~/dev/nix-config#factory-vm -- ssh sudo cat /var/lib/forgejo/admin-password | forge-bootstrap
 forge-seed          # copy the fleet's repos from GitHub (uses `gh auth token`)
+forge-workflows     # put the fleet's CI workflow in every repo
 forge-status        # health check; exits non-zero when anything is missing
 ```
 
 `forge-bootstrap` makes this Mac's API token, the org and this Mac's runner
 registration. It reads the admin password only when the Mac holds no token the
 forge accepts; after that, run it bare.
+
+Every repo carries the same workflow, `.forgejo/workflows/ci.yml`, stamped
+from `forgejo/workflow.yml`. It has one job with one step, `forge-ci`, a
+command each runner puts on its jobs' PATH. `forge-ci` checks the commit out
+and runs the repo's gate, `mise run ci`, on a push to main and on every pull
+request. The result is the commit status `ci / ci (push)` or
+`ci / ci (pull_request)`. `ci.runsOn` in the declaration names the runner for
+the whole fleet. `forge-status` fails while any repo's copy differs.
+
+The stamp is a commit in the forge only, not on GitHub. A repo seeded again
+from GitHub needs `forge-workflows` again.
 
 Two runners take jobs. The VM's own runs `runs-on: native` on Linux with Nix.
 The Mac's runs `runs-on: macos` on the Mac itself, as you.
