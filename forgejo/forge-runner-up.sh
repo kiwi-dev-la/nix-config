@@ -4,6 +4,13 @@
 [ -s "$secrets/runner_uuid" ] && [ -s "$secrets/runner_secret" ] ||
   die "this host's runner is not registered; run forge-bootstrap first"
 
+# The runner gives up at once when the forge is not there, and the forge can
+# come up after this host does.
+if ! healthy; then
+  echo "forge: waiting for the forge at $FORGE_URL" >&2
+  until healthy; do sleep 5; done
+fi
+
 runner_home="$forge_home/runner"
 mkdir -p "$runner_home/work"
 cd "$runner_home"

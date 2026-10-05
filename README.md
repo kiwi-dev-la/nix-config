@@ -94,7 +94,6 @@ set up by hand.
 ```sh
 nix develop ~/dev/nix-config#forgejo
 nix run ~/dev/nix-config#factory-vm -- ssh sudo cat /var/lib/forgejo/admin-password | forge-bootstrap
-forge-runner-up     # this Mac's runner, in the foreground
 forge-seed          # copy the fleet's repos from GitHub (uses `gh auth token`)
 forge-status        # health check; exits non-zero when anything is missing
 ```
@@ -105,6 +104,16 @@ forge accepts; after that, run it bare.
 
 Two runners take jobs. The VM's own runs `runs-on: native` on Linux with Nix.
 The Mac's runs `runs-on: macos` on the Mac itself, as you.
+
+The Mac's runner is a login service, declared in `forgejo/runner-agent.nix`.
+launchd starts it once `forge-bootstrap` has registered it, it waits for the
+forge when the VM is not up yet, and launchd restarts it if it stops. Its log
+is `~/Library/Logs/forge-runner.log`. `forge-runner-up` runs the same runner
+in the foreground.
+
+A rebuilt VM is a new forge that knows neither this Mac's token nor its
+runner. Run `forge-bootstrap` with the password again; the runner picks up
+the new registration within 30 seconds.
 
 The Mac's token and runner registration live in `~/.local/state/forgejo`
 (override with `FORGE_HOME`), never in this repo or the Nix store. Every
