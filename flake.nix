@@ -18,6 +18,7 @@
         (system: f nixpkgs.legacyPackages.${system});
 
       gitGuard = pkgs: import ./rules/git-guard.nix { inherit pkgs lib; };
+      forge = pkgs: import ./forgejo { inherit pkgs lib; gitGuard = gitGuard pkgs; };
     in
     {
       darwinConfigurations."Joels-MacBook-Pro" = nix-darwin.lib.darwinSystem {
@@ -37,6 +38,11 @@
 
       packages = forEachSystem (pkgs: {
         git-guard = gitGuard pkgs;
+      } // (forge pkgs).packages);
+
+      # `nix develop ~/dev/nix-config#forgejo`: the forge, its runner and its commands.
+      devShells = forEachSystem (pkgs: {
+        forgejo = (forge pkgs).shell;
       });
 
       # `nix flake check` proves each rule against a scratch repository.
