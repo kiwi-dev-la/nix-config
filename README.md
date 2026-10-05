@@ -31,6 +31,7 @@ in `hosts/macbook-pro.nix`, run `rebuild`. Remove the line to uninstall it.
 
 - `hosts/macbook-pro.nix`: system: GUI apps, fonts, macOS defaults, Touch ID sudo.
 - `home/default.nix`: user: zsh, prompt, CLI tools, git.
+- `rules/`: the git guard that enforces `AGENTS.md` in every shell, and its test.
 - `templates/devshell`: per-project environment.
 
 ## New project environment

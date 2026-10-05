@@ -1,9 +1,14 @@
-{ pkgs, ... }:
+{ pkgs, lib, ... }:
 
 {
   home.stateVersion = "26.11";
 
-  home.packages = with pkgs; [ claude-code ];
+  home.packages = with pkgs; [
+    claude-code
+    # The rules in AGENTS.md, enforced: this `git` wins over the one
+    # programs.git installs, in every shell and not only in dev shells.
+    (lib.hiPrio (import ../rules/git-guard.nix { inherit pkgs lib; }))
+  ];
 
   # `gh auth login` once (HTTPS); gh then signs git in for clone and push.
   programs.gh = {
