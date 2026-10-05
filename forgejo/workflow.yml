@@ -21,6 +21,7 @@ jobs:
     timeout-minutes: 60
     steps:
       # forge-ci is on every runner's PATH. It checks this commit out and runs
-      # the repo's gate, `mise run ci`.
-      - name: mise run ci
+      # the repo's gate: `nix run .#ci`, or `mise run ci` in a repo whose flake
+      # has no such app yet.
+      - name: gate
         run: forge-ci

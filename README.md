@@ -109,12 +109,12 @@ forge accepts; after that, run it bare.
 Every repo carries the same workflow, `.forgejo/workflows/ci.yml`, stamped
 from `forgejo/workflow.yml`. It has one job with one step, `forge-ci`, a
 command each runner puts on its jobs' PATH. `forge-ci` checks the commit out
-and runs the repo's gate, `mise run ci`, on a push to main and on every pull
-request. The result is the commit status `ci / ci (push)` or
+and runs the repo's gate on a push to main and on every pull request. The
+gate is `nix run .#ci` when the repo's flake has that app, else `mise run ci`. The result is the commit status `ci / ci (push)` or
 `ci / ci (pull_request)`. `ci.runsOn` in the declaration names the runner for
 the whole fleet. `forge-status` fails while any repo's copy differs.
 
-The gate runs in the environment the repo declares: its flake's `ci` dev
+`mise run ci` runs in the environment the repo declares: its flake's `ci` dev
 shell, else its `default` one. A repo with no flake gets the tools its
 `mise.toml` installs and whatever the runner's host has, so a gate that leans
 on a tool the repo does not declare fails here even if it passes at your desk.
