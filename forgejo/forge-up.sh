@@ -1,4 +1,7 @@
-# Run the Forgejo server in the foreground.
+# Serve the forge from this host, in the foreground.
+
+[ "$FORGE_URL" = "$FORGE_DECLARED_URL" ] ||
+  die "FORGE_URL is $FORGE_URL, a forge served elsewhere; forge-up serves $FORGE_DECLARED_URL"
 
 mkdir -p "$forge_home"/{data,repositories,custom/conf} "$secrets"
 chmod 700 "$forge_home" "$secrets"

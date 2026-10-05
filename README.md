@@ -48,23 +48,34 @@ Tools listed in the repo's `flake.nix` load when you `cd` in and unload when you
 
 ## The forge (Forgejo)
 
-A local Forgejo server, its Actions runner and the `fj` CLI, all declared in
-`forgejo/default.nix`: port, org, runner labels, the repos to seed. Nothing is
-set up by hand.
+One Forgejo forge, declared in `forgejo/declaration.nix`: port, org, admin,
+runner labels, the repos to seed. The `forge-*` commands bring the Forgejo at
+that address to the declared state, whichever host serves it. Nothing is set
+up by hand.
 
 ```sh
 nix develop ~/dev/nix-config#forgejo
-forge-up            # terminal 1: the server, http://127.0.0.1:3600
-forge-bootstrap     # once it is up: admin, token, org, runner registration
-forge-runner-up     # terminal 2: the runner; a workflow asks for `runs-on: macos`
+forge-up            # terminal 1: serve the forge from this host
+forge-bootstrap     # once it is up: this host's API token, the org, this host's runner
+forge-runner-up     # terminal 2: this host's runner; on a Mac a workflow asks for `runs-on: macos`
 forge-seed          # copy the fleet's repos from GitHub (uses `gh auth token`)
 forge-status        # health check; exits non-zero when anything is missing
 ```
 
+When another host serves the forge, such as a VM, skip `forge-up` and give
+`forge-bootstrap` one of that forge's admins. This host still adds its runner,
+so macOS jobs have somewhere to run:
+
+```sh
+FORGE_ADMIN=<name> FORGE_ADMIN_PASSWORD_FILE=<file> forge-bootstrap
+```
+
+`FORGE_URL` points every command at a forge on another address.
+
 State lives in `~/.local/state/forgejo` (override with `FORGE_HOME`). Secrets
-are generated there on first start and are never in this repo or the Nix
-store. Every command can be run again; each only adds what is missing.
+are generated there and are never in this repo or the Nix store. Every command
+can be run again; each only adds what is missing.
 
 nixpkgs marks Forgejo broken on macOS and caches no binary for it, so the
-first `nix develop` compiles it from source with its test phase off. One
+first `nix develop` on a Mac compiles it from source with its test phase off. One
 upstream test fails on macOS (`TestGrepSearch`, the code-search path).

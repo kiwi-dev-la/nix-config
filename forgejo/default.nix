@@ -1,42 +1,15 @@
-# A Forgejo forge spawned from this file: the server, its Actions runner and
-# the CLI, with the config rendered from the declaration below. Nothing is set
-# up by hand and no secret is in this repo.
+# A Forgejo forge spawned from declaration.nix: the server, its Actions runner
+# and the commands that drive it. Nothing is set up by hand and no secret is
+# in this repo.
 { pkgs, lib, gitGuard }:
 
 let
-  # The one declaration of the forge.
-  forge = {
-    port = 3600;
-    org = "lightwave-media";
-    admin = "forge-admin";
-    runner = {
-      labels = [ "macos:host" ];   # a workflow asks for `runs-on: macos`
-      capacity = 1;
-    };
-    # forge-seed copies these from github.com/<githubOrg>.
-    githubOrg = "lightwave-media";
-    repos = [
-      "lightwave-core"
-      "lightwave-cli"
-      "lightwave-ai"
-      "lightwave-platform"
-      "lightwave-plugin"
-      "lightwave-ui"
-      "lightwave-sys"
-      "lightwave-infrastructure-catalog"
-      "lightwave-infrastructure-live"
-      "lightwave-media-site"
-      "joelschaeffer-site"
-      "createOS"
-      "pipelines-workflows"
-    ];
-  };
+  forge = import ./declaration.nix;
 
   url = "http://127.0.0.1:${toString forge.port}";
 
-  # The server matches a job's `runs-on` against the bare name; only the runner
-  # itself reads the `:host` part.
-  runsOn = map (label: builtins.head (lib.splitString ":" label)) forge.runner.labels;
+  runnerLabels =
+    if pkgs.stdenv.hostPlatform.isDarwin then forge.runner.labels.darwin else forge.runner.labels.linux;
 
   # nixpkgs flags Forgejo broken on Darwin and ships no binary for it. It
   # compiles there; one upstream test fails (TestGrepSearch in modules/git, the
@@ -100,10 +73,13 @@ let
   # The @...@ values are filled in when the runner starts.
   runnerConfig = pkgs.writeText "forgejo-runner.yaml" (builtins.toJSON {
     log.level = "info";
-    runner = { inherit (forge.runner) capacity labels; };
+    runner = {
+      inherit (forge.runner) capacity;
+      labels = runnerLabels;
+    };
     host.workdir_parent = "@RUNNER_HOME@/work";
     server.connections.forge = {
-      inherit url;
+      url = "@FORGE_URL@";
       uuid = "@RUNNER_UUID@";
       token_url = "file:@FORGE_HOME@/secrets/runner_secret";
     };
@@ -115,12 +91,12 @@ let
     # Every command gets the whole declaration and lib.sh; none uses all of it.
     excludeShellChecks = [ "SC2034" "SC2329" ];
     text = ''
-      FORGE_URL=${url}
+      FORGE_DECLARED_URL=${url}
+      FORGE_URL="''${FORGE_URL:-$FORGE_DECLARED_URL}"
       FORGE_ORG=${forge.org}
-      FORGE_ADMIN=${forge.admin}
+      FORGE_ADMIN="''${FORGE_ADMIN:-${forge.admin}}"
       FORGE_GITHUB_ORG=${forge.githubOrg}
       FORGE_REPOS=${lib.escapeShellArg (lib.concatStringsSep " " forge.repos)}
-      FORGE_RUNNER_LABELS=${lib.escapeShellArg (lib.concatStringsSep "," runsOn)}
       FORGE_APP_INI=${appIni}
       FORGE_RUNNER_CONFIG=${runnerConfig}
     '' + builtins.readFile ./lib.sh + builtins.readFile (./. + "/${name}.sh");
@@ -145,12 +121,12 @@ in
   shell = pkgs.mkShell {
     packages = [ gitGuard forgejo pkgs.forgejo-runner pkgs.forgejo-cli pkgs.gh pkgs.jq ]
       ++ lib.attrValues commands;
-    FORGEJO_URL = url;
     shellHook = ''
-      echo "forge shell: ${url} (state in ''${FORGE_HOME:-~/.local/state/forgejo})"
-      echo "  forge-up          run the server"
-      echo "  forge-bootstrap   admin, token, org and runner registration (once the server is up)"
-      echo "  forge-runner-up   run the Actions runner"
+      export FORGE_URL="''${FORGE_URL:-${url}}"
+      echo "forge shell: $FORGE_URL (state in ''${FORGE_HOME:-~/.local/state/forgejo})"
+      echo "  forge-up          serve the forge from this host"
+      echo "  forge-bootstrap   token, org and this host's runner (once the forge is up)"
+      echo "  forge-runner-up   run this host's Actions runner"
       echo "  forge-seed        copy the fleet's repos from GitHub"
       echo "  forge-status      health check"
     '';

@@ -2,7 +2,7 @@
 # repos already in the forge are left alone.
 
 healthy || die "the server is not answering at $FORGE_URL"
-[ -s "$secrets/admin_auth_header" ] || die "not bootstrapped; run forge-bootstrap first"
+[ -s "$auth_header" ] || die "not bootstrapped; run forge-bootstrap first"
 
 # Private repos need a GitHub token. It goes through the environment and
 # stdin, never a command line. FORGE_SEED_ANONYMOUS=1 sends none, which is
