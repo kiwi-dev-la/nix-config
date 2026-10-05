@@ -1,5 +1,5 @@
 {
-  description = "Joel Schaeffer's nix-darwin configuration";
+  description = "Joel's Mac: nix-darwin + home-manager, Nix for everything";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -9,77 +9,28 @@
 
     home-manager.url = "github:nix-community/home-manager";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
-
-    # Keeps nix-darwin from overwriting Determinate's /etc/nix.
-    determinate.url = "https://flakehub.com/f/DeterminateSystems/determinate/3";
-
-    # The released lw CLI, pinned by tag. `mise run lw:sync` (the one lw
-    # installer) builds this and links the binary into ~/.local/bin.
-    # Deliberately NOT in home.packages: two copies of lw on PATH, with a
-    # different winner per shell type, is the drift this repo exists to
-    # remove. Roll lw forward by bumping the tag and re-locking.
-    lightwave-cli.url = "github:lightwave-media/lightwave-cli/v3.17.1";
-    lightwave-cli.inputs.nixpkgs.follows = "nixpkgs";
-
-    # The released lightwave-core schema library, pinned by tag, so a check
-    # can read a released schema surface instead of whatever branch the ~/dev
-    # checkout has out. Per core's own flake: pass it PER INVOCATION
-    # (LW_LIGHTWAVE_ROOT=$(nix build --print-out-paths .#schemas) lw check
-    # schema) and never export it session-wide; lw resolves sibling repos from
-    # that root, and this tree carries no runbooks or boilerplate. The repo is
-    # private, so this is git+ssh (a github: ref 404s without a token). Roll
-    # forward by bumping the tag and re-locking, same as lightwave-cli.
-    lightwave-core.url = "git+ssh://git@github.com/lightwave-media/lightwave-core?ref=refs/tags/v0.9.1";
-    lightwave-core.inputs.nixpkgs.follows = "nixpkgs";
-
-    # nullhub and the observability stack, built from lightwave-ai so the
-    # launchd jobs run store paths instead of scripts in a worktree. Private
-    # repo, so git+ssh. Not following our nixpkgs: the Zig toolchain is pinned
-    # by lightwave-ai's own lock. Roll forward by re-locking.
-    # Fetching needs an SSH key that can read lightwave-media's private repos:
-    # today Joel's ssh agent, which is enough for an interactive switch. No
-    # deploy key exists yet, so an unattended build (a cron rebuild, the Mac
-    # Studio) fails closed until one is issued. lightwave-core above is the same.
-    lightwave-ai.url = "git+ssh://git@github.com/lightwave-media/lightwave-ai?ref=main";
-    lightwave-ai-obs.url = "git+ssh://git@github.com/lightwave-media/lightwave-ai?ref=main&dir=nix/observability";
   };
 
-  outputs = { self, nixpkgs, nix-darwin, home-manager, determinate, lightwave-cli, lightwave-core, lightwave-ai, lightwave-ai-obs, ... }: {
-    # `nix build .#lw` builds exactly the lw this host pins; lw:sync targets it.
-    packages.aarch64-darwin.lw = lightwave-cli.packages.aarch64-darwin.lw;
-    # `nix build .#schemas` is the pinned schema tree; per-invocation only.
-    packages.aarch64-darwin.schemas = lightwave-core.packages.aarch64-darwin.schemas;
-
-    # Retires a hand-written launchd job only after its nix-darwin replacement
-    # is installed and has run. Dry run unless given --apply.
-    apps.aarch64-darwin.archive-launchd = {
-      type = "app";
-      program = "${nixpkgs.legacyPackages.aarch64-darwin.writeShellApplication {
-        name = "archive-launchd";
-        runtimeInputs = [ nixpkgs.legacyPackages.aarch64-darwin.coreutils ];
-        text = builtins.readFile ./scripts/archive-launchd.sh;
-      }}/bin/archive-launchd";
-    };
-
+  outputs = { nixpkgs, nix-darwin, home-manager, ... }: {
     darwinConfigurations."Joels-MacBook-Pro" = nix-darwin.lib.darwinSystem {
       system = "aarch64-darwin";
-      # The pinned lw, for launchd jobs that inject secrets with `lw config exec`.
-      specialArgs = {
-        lw = lightwave-cli.packages.aarch64-darwin.lw;
-        nullhub = lightwave-ai.packages.aarch64-darwin.nullhub;
-        obs = lightwave-ai-obs.packages.aarch64-darwin;
-      };
       modules = [
-        determinate.darwinModules.default
         ./hosts/macbook-pro.nix
-        ./hosts/launchd-agents.nix
+        ./hosts/hand-installed-apps.nix
         home-manager.darwinModules.home-manager
         {
           home-manager.useGlobalPkgs = true;
           home-manager.useUserPackages = true;
+          home-manager.backupFileExtension = "hm-backup";
           home-manager.users.joelschaeffer = import ./home;
         }
       ];
+    };
+
+    # Per-project dev environment: `nix flake init -t github:kiwi-dev-la/nix-config#devshell`
+    templates.devshell = {
+      path = ./templates/devshell;
+      description = "Project flake with a devShell, loaded by direnv on cd";
     };
   };
 }

@@ -1,39 +1,41 @@
 { pkgs, ... }:
 
 {
-  # Homebrew is managed from here, holding only what Nix cannot provide yet.
-  imports = [ ./homebrew.nix ];
+  # Determinate Nix manages the Nix install itself; nix-darwin must not.
+  nix.enable = false;
 
   nixpkgs.hostPlatform = "aarch64-darwin";
   nixpkgs.config.allowUnfree = true;
 
-  # Determinate Nix owns /etc/nix. Do not let nix-darwin fight it.
-  nix.enable = false;
-
   networking.hostName = "Joels-MacBook-Pro";
-
-  users.users.joelschaeffer = {
-    home = "/Users/joelschaeffer";
-    shell = pkgs.zsh;
-  };
+  networking.computerName = "Joel's MacBook Pro";
 
   system.primaryUser = "joelschaeffer";
+  users.users.joelschaeffer.home = "/Users/joelschaeffer";
 
-  # Used by nix-darwin for backwards-compatible defaults. Bump only when
-  # the nix-darwin release notes say to.
-  system.stateVersion = 6;
-
-  environment.systemPackages = with pkgs; [
-    git
-    nil
-    nixfmt
-  ];
-
+  # Writes /etc/zshrc so every zsh sees the Nix profile paths.
   programs.zsh.enable = true;
 
-  environment.variables = {
-    GOPATH = "/Users/joelschaeffer/.local/share/go";
-    GOMODCACHE = "/Users/joelschaeffer/Library/Caches/go-mod";
-    GOBIN = "/Users/joelschaeffer/.local/bin";
+  # Add an app here the day you need it, then `rebuild`. GUI apps land in
+  # /Applications/Nix Apps. Find names with `nix search nixpkgs <name>`.
+  environment.systemPackages = with pkgs; [
+    ghostty-bin
+    zed-editor
+  ];
+
+  # The prompt's icons need a Nerd Font.
+  fonts.packages = [ pkgs.nerd-fonts.jetbrains-mono ];
+
+  security.pam.services.sudo_local.touchIdAuth = true;
+
+  system.defaults = {
+    dock.autohide = true;
+    dock.show-recents = false;
+    finder.AppleShowAllExtensions = true;
+    finder.FXPreferredViewStyle = "Nlsv";
+    NSGlobalDomain.KeyRepeat = 2;
+    NSGlobalDomain.InitialKeyRepeat = 15;
   };
+
+  system.stateVersion = 7;
 }
