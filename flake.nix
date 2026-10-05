@@ -17,7 +17,7 @@
   outputs = { self, nixpkgs, nix-darwin, home-manager, disko, ... }:
     let
       inherit (nixpkgs) lib;
-      forEachSystem = f: lib.genAttrs [ "aarch64-darwin" "x86_64-linux" ]
+      forEachSystem = f: lib.genAttrs [ "aarch64-darwin" "aarch64-linux" "x86_64-linux" ]
         (system: f nixpkgs.legacyPackages.${system});
 
       gitGuard = pkgs: import ./rules/git-guard.nix { inherit pkgs lib; };
@@ -51,7 +51,7 @@
         // lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin
         (import ./vm { inherit pkgs; flake = self; }));
 
-      # `nix develop ~/dev/nix-config#forgejo`: the forge, its runner and its commands.
+      # `nix develop ~/dev/nix-config#forgejo`: the forge's commands and this host's runner.
       devShells = forEachSystem (pkgs: {
         forgejo = (forge pkgs).shell;
       });

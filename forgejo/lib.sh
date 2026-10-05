@@ -2,7 +2,6 @@
 
 forge_home="${FORGE_HOME:-${XDG_STATE_HOME:-$HOME/.local/state}/forgejo}"
 secrets="$forge_home/secrets"
-app_ini="$forge_home/custom/conf/app.ini"
 # This host's API token for the forge, as a curl header line.
 auth_header="${FORGE_AUTH_HEADER_FILE:-$secrets/admin_auth_header}"
 runner_name="${FORGE_RUNNER_NAME:-$(hostname -s)}"
@@ -10,11 +9,6 @@ runner_name="${FORGE_RUNNER_NAME:-$(hostname -s)}"
 die() {
   echo "forge: $1" >&2
   exit 1
-}
-
-# forgejo, pointed at the state and config of a forge this host serves.
-forge() {
-  forgejo --work-path "$forge_home" --config "$app_ini" "$@"
 }
 
 # The API as the admin: api <path> [curl options]. The token is read from a

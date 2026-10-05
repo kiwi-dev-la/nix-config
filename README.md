@@ -70,7 +70,7 @@ waits for the build the merge starts, and checks Forgejo logged no errors.
 - `hosts/macbook-pro.nix`: system: GUI apps, fonts, macOS defaults, Touch ID sudo.
 - `home/default.nix`: user: zsh, prompt, CLI tools, git.
 - `rules/`: the git guard that enforces `AGENTS.md` in every shell, and its test.
-- `forgejo/`: the forge, its runner and the `forge-*` commands.
+- `forgejo/`: the forge's declaration and the `forge-*` commands that drive it.
 - `templates/devshell`: per-project environment.
 
 ## New project environment
@@ -86,34 +86,27 @@ Tools listed in the repo's `flake.nix` load when you `cd` in and unload when you
 
 ## The forge (Forgejo)
 
-One Forgejo forge, declared in `forgejo/declaration.nix`: port, org, admin,
-runner labels, the repos to seed. The `forge-*` commands bring the Forgejo at
-that address to the declared state, whichever host serves it. Nothing is set
-up by hand.
+One Forgejo forge, served by the factory VM and declared in
+`forgejo/declaration.nix`: port, org, admin, runner labels, the repos to seed.
+The `forge-*` commands bring it to the declared state from the Mac. Nothing is
+set up by hand.
 
 ```sh
 nix develop ~/dev/nix-config#forgejo
-forge-up            # terminal 1: serve the forge from this host
-forge-bootstrap     # once it is up: this host's API token, the org, this host's runner
-forge-runner-up     # terminal 2: this host's runner; on a Mac a workflow asks for `runs-on: macos`
+nix run ~/dev/nix-config#factory-vm -- ssh sudo cat /var/lib/forgejo/admin-password | forge-bootstrap
+forge-runner-up     # this Mac's runner, in the foreground
 forge-seed          # copy the fleet's repos from GitHub (uses `gh auth token`)
 forge-status        # health check; exits non-zero when anything is missing
 ```
 
-When another host serves the forge, such as a VM, skip `forge-up` and give
-`forge-bootstrap` one of that forge's admins. This host still adds its runner,
-so macOS jobs have somewhere to run:
+`forge-bootstrap` makes this Mac's API token, the org and this Mac's runner
+registration. It reads the admin password only when the Mac holds no token the
+forge accepts; after that, run it bare.
 
-```sh
-FORGE_ADMIN=<name> FORGE_ADMIN_PASSWORD_FILE=<file> forge-bootstrap
-```
+Two runners take jobs. The VM's own runs `runs-on: native` on Linux with Nix.
+The Mac's runs `runs-on: macos` on the Mac itself, as you.
 
-`FORGE_URL` points every command at a forge on another address.
-
-State lives in `~/.local/state/forgejo` (override with `FORGE_HOME`). Secrets
-are generated there and are never in this repo or the Nix store. Every command
-can be run again; each only adds what is missing.
-
-nixpkgs marks Forgejo broken on macOS and caches no binary for it, so the
-first `nix develop` on a Mac compiles it from source with its test phase off. One
-upstream test fails on macOS (`TestGrepSearch`, the code-search path).
+The Mac's token and runner registration live in `~/.local/state/forgejo`
+(override with `FORGE_HOME`), never in this repo or the Nix store. Every
+command can be run again; each only adds what is missing. `FORGE_URL` points
+every command at a forge on another address.

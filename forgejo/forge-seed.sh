@@ -1,7 +1,7 @@
 # Copy the declared repos from GitHub into the forge. Reads from GitHub only;
 # repos already in the forge are left alone.
 
-healthy || die "the server is not answering at $FORGE_URL"
+healthy || die "the forge is not answering at $FORGE_URL"
 [ -s "$auth_header" ] || die "not bootstrapped; run forge-bootstrap first"
 
 # Private repos need a GitHub token. It goes through the environment and

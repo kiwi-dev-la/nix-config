@@ -1,10 +1,9 @@
-# The one declaration of the forge. default.nix renders the server, the runner
-# and the forge-* commands from it. A machine that hosts the forge reads the
-# same values: `import ../../forgejo/declaration.nix`.
+# The one declaration of the forge. The factory VM (machines/factory) serves
+# it; default.nix renders the forge-* commands and this host's runner from it.
 {
-  port = 3600;
+  port = 3300;
   org = "lightwave-media";
-  admin = "forge-admin";
+  admin = "joel";   # made by the VM on first boot
   runner = {
     capacity = 1;
     # What a workflow's `runs-on` asks for, by the kind of host the runner is on.
