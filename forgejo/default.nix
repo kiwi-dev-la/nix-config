@@ -64,11 +64,13 @@ let
     '' + builtins.readFile ./lib.sh + builtins.readFile (./. + "/${name}.sh");
   };
 
-  commands = {
+  commands = rec {
     forge-bootstrap = command "forge-bootstrap" [ ];
     forge-runner-up = command "forge-runner-up" [ pkgs.forgejo-runner ];
     forge-status = command "forge-status" [ ];
-    forge-seed = command "forge-seed" [ pkgs.gh ];
+    # Seeding ends by stamping, so no repo sits in the forge with only the
+    # workflows it arrived with.
+    forge-seed = command "forge-seed" [ pkgs.gh forge-workflows ];
     forge-workflows = command "forge-workflows" [ ];
   };
 in

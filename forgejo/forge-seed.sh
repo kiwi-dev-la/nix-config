@@ -34,4 +34,8 @@ for repo in $FORGE_REPOS; do
     failed=1
   fi
 done
+
+# A repo arrives with whatever workflows it had on GitHub. Replace them with
+# the fleet's before anything can push to it.
+forge-workflows || failed=1
 exit "$failed"

@@ -97,8 +97,8 @@ set up by hand.
 ```sh
 nix develop ~/dev/nix-config#forgejo
 nix run ~/dev/nix-config#factory-vm -- ssh sudo cat /var/lib/forgejo/admin-password | forge-bootstrap
-forge-seed          # copy the fleet's repos from GitHub (uses `gh auth token`)
-forge-workflows     # put the fleet's CI workflow in every repo
+forge-seed          # copy the fleet's repos from GitHub (uses `gh auth token`), then stamp them
+forge-workflows     # put the fleet's CI workflow in every repo; forge-seed ends with this
 forge-status        # health check; exits non-zero when anything is missing
 ```
 
@@ -126,8 +126,8 @@ curl --header @~/.local/state/forgejo/secrets/admin_auth_header --json '{"ref": 
   http://127.0.0.1:3300/api/v1/repos/lightwave-media/<repo>/actions/workflows/ci.yml/dispatches
 ```
 
-The stamp is a commit in the forge only, not on GitHub. A repo seeded again
-from GitHub needs `forge-workflows` again.
+A stamp is a commit in the forge. Repos that already carry the same file on
+GitHub arrive with it and are left alone; `forge-seed` stamps the rest.
 
 Two runners take jobs. The VM's own runs `runs-on: native` on Linux with Nix.
 The Mac's runs `runs-on: macos` on the Mac itself, as you.
