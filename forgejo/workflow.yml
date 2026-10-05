@@ -7,6 +7,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Run it again without a new commit, from the web or the API.
+  workflow_dispatch:
 
 # One run per branch or pull request: a newer push replaces the run in flight.
 concurrency:

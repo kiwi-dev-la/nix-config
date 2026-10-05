@@ -111,6 +111,18 @@ request. The result is the commit status `ci / ci (push)` or
 `ci / ci (pull_request)`. `ci.runsOn` in the declaration names the runner for
 the whole fleet. `forge-status` fails while any repo's copy differs.
 
+The gate runs in the environment the repo declares: its flake's `ci` dev
+shell, else its `default` one. A repo with no flake gets the tools its
+`mise.toml` installs and whatever the runner's host has, so a gate that leans
+on a tool the repo does not declare fails here even if it passes at your desk.
+
+To run a repo's gate again without a commit:
+
+```sh
+curl --header @~/.local/state/forgejo/secrets/admin_auth_header --json '{"ref": "main"}' \
+  http://127.0.0.1:3300/api/v1/repos/lightwave-media/<repo>/actions/workflows/ci.yml/dispatches
+```
+
 The stamp is a commit in the forge only, not on GitHub. A repo seeded again
 from GitHub needs `forge-workflows` again.
 

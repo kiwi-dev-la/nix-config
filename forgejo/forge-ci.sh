@@ -37,11 +37,30 @@ echo "forge-ci: $GITHUB_REPOSITORY at $("$GIT" rev-parse --short HEAD) ($GITHUB_
   exit 1
 }
 
+# The gate runs in the environment the repo declares: its flake's `ci` shell,
+# else its default shell. A repo with no flake gets only what its mise.toml
+# installs and what the runner's host has.
+enter=()
+if [ -f flake.nix ]; then
+  command -v nix >/dev/null || {
+    echo "forge-ci: this repo has a flake.nix and the runner has no nix on its PATH" >&2
+    exit 1
+  }
+  system="$(nix eval --raw --impure --expr builtins.currentSystem)"
+  for shell in ci default; do
+    if nix eval --raw ".#devShells.$system.$shell.drvPath" >/dev/null 2>&1; then
+      enter=(nix develop ".#$shell" --command)
+      echo "forge-ci: the gate runs in the flake's $shell shell"
+      break
+    fi
+  done
+fi
+[ "${#enter[@]}" -gt 0 ] || echo "forge-ci: no Nix dev shell; the gate's tools come from mise.toml and the runner's host"
+
 # The gate sees the repo's own mise.toml and nothing from the account the
 # runner happens to run under.
 export CI=true
 export MISE_YES=1
 export MISE_TRUSTED_CONFIG_PATHS="$PWD"
 export MISE_GLOBAL_CONFIG_FILE="$NO_GLOBAL_CONFIG"
-mise install
-exec mise run ci
+exec "${enter[@]}" sh -c 'mise install && exec mise run ci'
