@@ -13,6 +13,7 @@ usage() {
   printf '%s\n' '  factory-vm secret list         which secrets the VM holds (names only)' >&2
   printf '%s\n' '  factory-vm backup [--disk]  copy the forge and the tickets to the NAS; with --disk,' >&2
   printf '%s\n' '                              also the whole VM disk (the VM is stopped meanwhile)' >&2
+  printf '%s\n' '  factory-vm restore <backup folder>   put the forge and the tickets back from a backup' >&2
   printf '%s\n' '  factory-vm stop      shut it down' >&2
   printf '%s\n' '  factory-vm destroy --yes    stop it and delete its disk' >&2
   printf '%s\n' '  A second VM beside the first: FACTORY_VM_STATE=<dir> FACTORY_VM_SSH_PORT=2223' >&2
@@ -189,6 +190,36 @@ secret() {
 # the VM into one archive on the NAS, with the services stopped for the few
 # seconds the archive takes, and checks the copy. --disk also copies the VM's
 # disk and firmware variables, which needs the VM stopped.
+# The services a backup or a restore stops, in both layouts: the module's
+# units, and the transient ones of the hand-run factory (absent ones are
+# skipped). The paths are those that exist in the VM.
+fleet_stop='systemctl stop forgejo factory-gate.timer factory-gate factory-nullboiler factory-nullwatch factory-nulltickets nullhub-exp nullboiler-factory 2>/dev/null || true'
+fleet_start='systemctl start forgejo; systemctl start factory-nulltickets factory-nullwatch factory-nullboiler factory-gate.timer nullhub-exp 2>/dev/null || true'
+fleet_paths='for p in var/lib/forgejo var/lib/factory home/joel/.nullhub home/joel/factory/state home/joel/factory-hooks home/joel/.factory-pipeline; do [ -e "/$p" ] && echo "$p"; done'
+
+# restore <backup folder>: the forge and the factory's state come back from
+# a backup; the services are stopped meanwhile and started again. Secrets
+# are not in a backup: place them again with `factory-vm secret set`.
+restore() {
+  running || die "the VM is not running; run: factory-vm up"
+  local src=${1:-}
+  [[ -n $src && -f $src/factory-state.tgz ]] || die "restore needs a backup folder holding factory-state.tgz"
+  (cd "$src" && sha256sum -c --quiet SHA256SUMS) || die "the archive does not match its checksum"
+  say "stopping the forge and the fleet for the restore"
+  vm_ssh root@127.0.0.1 "$fleet_stop"
+  local rc=0
+  vm_ssh root@127.0.0.1 'tar -C / -xzf -' <"$src/factory-state.tgz" || rc=$?
+  vm_ssh root@127.0.0.1 '
+    [ -e /var/lib/forgejo ] && chown -R forgejo:forgejo /var/lib/forgejo
+    for p in /var/lib/factory /home/joel/.nullhub /home/joel/factory /home/joel/factory-hooks /home/joel/.factory-pipeline; do
+      [ -e "$p" ] && chown -R joel:users "$p"
+    done; true'
+  vm_ssh root@127.0.0.1 "$fleet_start"
+  ((rc == 0)) || die "the restore failed (exit $rc); the services are started again"
+  say "restored from $src; secrets are not in a backup, place them with: factory-vm secret set <name>"
+  status
+}
+
 backup() {
   running || die "the VM is not running; run: factory-vm up"
   [[ -d ${BACKUP_DIR%/*} ]] || die "the NAS share is not mounted at ${BACKUP_DIR%/*}"
@@ -196,11 +227,12 @@ backup() {
   dest=$BACKUP_DIR/$(date +%Y%m%d-%H%M%S)
   mkdir -p "$dest"
   say "stopping the forge and the fleet for the archive"
-  vm_ssh root@127.0.0.1 'systemctl stop forgejo; systemctl stop nullhub-exp 2>/dev/null || true'
+  vm_ssh root@127.0.0.1 "$fleet_stop"
   local rc=0
-  vm_ssh root@127.0.0.1 'tar -C / -czf - var/lib/forgejo home/joel/.nullhub home/joel/factory-hooks home/joel/.factory-pipeline 2>/dev/null' \
-    >"$dest/factory-state.tgz" || rc=$?
-  vm_ssh root@127.0.0.1 'systemctl start forgejo; systemctl start nullhub-exp 2>/dev/null || true'
+  # Whatever exists of either layout: the module's /var/lib/factory, and the
+  # hand-run factory's folders under /home/joel. Secrets are not archived.
+  vm_ssh root@127.0.0.1 "$fleet_paths"' | tar -C / -czf - -T -' >"$dest/factory-state.tgz" || rc=$?
+  vm_ssh root@127.0.0.1 "$fleet_start"
   ((rc == 0)) || die "the archive failed (exit $rc); the services are started again"
   tar -tzf "$dest/factory-state.tgz" >"$dest/factory-state.list" || die "the archive does not list"
   tmp=$(mktemp -d)
@@ -240,6 +272,10 @@ case "${1:-}" in
   backup)
     shift
     backup "$@"
+    ;;
+  restore)
+    shift
+    restore "$@"
     ;;
   secret)
     shift
