@@ -13,6 +13,21 @@
   # Where GitButler's installer puts `but` (README, bootstrap step 6).
   home.sessionPath = [ "$HOME/.local/bin" ];
 
+  # GitButler's skill for each coding agent, written by `but` itself so it
+  # matches the installed CLI. Runs on every rebuild; a Mac that has no `but`
+  # yet is told and skipped, never failed.
+  home.activation.gitbutlerSkills = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    but="$HOME/.local/bin/but"
+    if [ -x "$but" ]; then
+      for agent in .claude .codex .cursor; do
+        run "$but" skill install --path "$HOME/$agent/skills/gitbutler" >/dev/null </dev/null ||
+          echo "gitbutler: could not install the skill for $agent" >&2
+      done
+    else
+      echo "gitbutler: not installed; README bootstrap step 6, then rebuild" >&2
+    fi
+  '';
+
   # `gh auth login` once (HTTPS); gh then signs git in for clone and push.
   programs.gh = {
     enable = true;
