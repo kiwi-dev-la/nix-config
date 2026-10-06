@@ -17,6 +17,7 @@ in
   # lightwave-ai. Secrets are placed with `factory-vm secret set`.
   services.factory = {
     enable = true;
+    forgeOwner = forge.org;
     repos = map (name: { inherit name; workers = 2; }) forge.repos;
   };
 

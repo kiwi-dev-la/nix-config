@@ -193,12 +193,12 @@ secret() {
 # The services a backup or a restore stops, in both layouts: the module's
 # units, and the transient ones of the hand-run factory (absent ones are
 # skipped). The paths are those that exist in the VM.
-fleet_stop='systemctl stop forgejo factory-gate.timer factory-gate factory-nullboiler factory-nullwatch factory-nulltickets nullhub-exp nullboiler-factory 2>/dev/null || true'
+fleet_stop='systemctl stop gitea-runner-factory forgejo factory-gate.timer factory-gate factory-nullboiler factory-nullwatch factory-nulltickets nullhub-exp nullboiler-factory 2>/dev/null || true'
 # The hand-run layout's two units are transient (systemd-run) and cannot be
 # started back by name: they are recreated the way the hand setup made them,
 # when their programs exist. The module's units start by name.
 # shellcheck disable=SC2016  # runs in the VM
-fleet_start='systemctl start forgejo
+fleet_start='systemctl start forgejo; systemctl start gitea-runner-factory 2>/dev/null || true
   systemctl start factory-nulltickets factory-nullwatch factory-nullboiler factory-gate.timer 2>/dev/null || true
   if [ -x /home/joel/.nullhub/bin/nullhub ] && ! systemctl is-active -q nullhub-exp; then
     systemctl reset-failed nullhub-exp 2>/dev/null || true
@@ -241,6 +241,10 @@ restore() {
     [ -d /var/lib/factory ] || exit 0
     h=/home/joel/.nullhub/instances
     if [ -f $h/nulltickets/nulltickets-1/nulltickets.db ]; then
+      # The rows may still sit in the write-ahead log: fold it in first, and
+      # leave no stale log beside the copy.
+      sqlite3 $h/nulltickets/nulltickets-1/nulltickets.db "PRAGMA wal_checkpoint(TRUNCATE);" >/dev/null
+      rm -f /var/lib/factory/nulltickets/nulltickets.db-wal /var/lib/factory/nulltickets/nulltickets.db-shm
       install -o joel -g users -m 640 $h/nulltickets/nulltickets-1/nulltickets.db /var/lib/factory/nulltickets/nulltickets.db
     fi
     if [ -d $h/nullwatch/nullwatch-1/data ]; then
