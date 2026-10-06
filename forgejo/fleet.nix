@@ -12,6 +12,10 @@
 #     kinds = [ "go" "node" ];                     # the templates below
 #     tools = pkgs: [ pkgs.goreleaser ];           # beyond what the kinds bring
 #     gate = [ "go vet ./..." "go test ./..." ];   # replaces the kinds' gate
+#     shell = pkgs: {                              # the repository's own shell:
+#       inputsFrom = [ (import ./nix/devShell.nix { inherit pkgs; }) ];
+#       shellHook = "unset OPENROUTER_API_KEY";    # env, hooks, a richer shell
+#     };
 #   };
 #
 # and gets:
@@ -19,18 +23,21 @@
 #                      gate uses (bash, coreutils, git, jq ...): `nix develop`,
 #                      and the shell every factory worker in a clone enters
 #   apps.ci            the gate: each step in order, from the repository's
-#                      root, with the same tools and nothing else; `nix run
-#                      .#ci` is what the forge's runner runs (forge-ci).
-#                      Without `gate`, the kinds' own steps, in kind order.
+#                      root, inside that same dev shell (its compiler
+#                      environment, SDK and hooks included); `nix run .#ci` is
+#                      what the forge's runner runs (forge-ci). Without
+#                      `gate`, the kinds' own steps, in kind order.
 #
 # Every repository pins the same nixpkgs (above) so one store serves them all.
-# Other outputs (packages, checks, modules) are the repository's own:
-# `import ./nix/fleet.nix { ... } // { packages = ...; }`.
+# Other outputs (packages, checks, modules) are the repository's own; merge
+# them deeply so the repository's apps sit beside `ci`:
+# `nixpkgs.lib.recursiveUpdate (import ./nix/fleet.nix { ... }) { packages = ...; }`.
 { nixpkgs
 , name
 , kinds ? [ ]
 , tools ? (pkgs: [ ])
 , gate ? null
+, shell ? (pkgs: { })
 , systems ? [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ]
 }:
 let
@@ -44,9 +51,24 @@ let
       tools = pkgs: [ pkgs.zig pkgs.zls ];
       gate = [ "zig build test --summary all" ];
     };
+    # Repositories still on zig 0.15. On macOS, zig 0.15 cannot link
+    # against the system's newer SDKs; it gets nixpkgs' SDK instead.
+    "zig-0.15" = {
+      tools = pkgs: [ pkgs.zig_0_15 pkgs.zls_0_15 ]
+        ++ lib.optional pkgs.stdenv.hostPlatform.isDarwin pkgs.apple-sdk_15;
+      gate = [ "zig build test --summary all" ];
+    };
     go = {
-      tools = pkgs: [ pkgs.go pkgs.gopls pkgs.golangci-lint ];
+      # A C compiler: `go test -race` needs cgo.
+      tools = pkgs: [ pkgs.go pkgs.gopls pkgs.golangci-lint pkgs.stdenv.cc ];
       gate = [ "test -z \"$(gofmt -l .)\"" "go vet ./..." "go test ./..." ];
+      # A GOROOT exported by another Go (mise, Homebrew) breaks Nix's Go.
+      shellHook = "unset GOROOT";
+    };
+    rust = {
+      tools = pkgs: [ pkgs.rustc pkgs.cargo pkgs.clippy pkgs.rustfmt pkgs.pkg-config pkgs.stdenv.cc ]
+        ++ lib.optional pkgs.stdenv.hostPlatform.isDarwin pkgs.libiconv;
+      gate = [ "cargo fmt --check" "cargo clippy -- -D warnings" "cargo test" ];
     };
     node = {
       tools = pkgs: [ pkgs.nodejs_24 ];
@@ -84,26 +106,36 @@ let
     map (k: templates.${k}) kinds;
 
   # What the gate's own steps and the fleet's scripts call, on every host.
-  base = pkgs: with pkgs; [ bash coreutils findutils gnugrep gnused gawk git jq ];
+  base = pkgs: with pkgs; [ bash coreutils diffutils findutils gnugrep gnused gawk git jq ];
   everything = pkgs: lib.unique (base pkgs ++ lib.concatMap (t: t.tools pkgs) chosen ++ tools pkgs);
   steps = if gate != null then gate else lib.concatMap (t: t.gate) chosen;
+  hooks = lib.concatStringsSep "\n" (lib.filter (h: h != "") (map (t: t.shellHook or "") chosen));
+  devShell = pkgs:
+    let own = shell pkgs; in
+    pkgs.mkShell (own // {
+      packages = everything pkgs ++ (own.packages or [ ]);
+      shellHook = lib.concatStringsSep "\n" (lib.filter (h: h != "") [ hooks (own.shellHook or "") ]);
+    });
 in
 assert lib.assertMsg (steps != [ ]) "nix/fleet.nix: ${name} has no gate: name a kind or list the steps";
 {
-  devShells = forAllSystems (pkgs: {
-    default = pkgs.mkShell { packages = everything pkgs; };
-  });
+  devShells = forAllSystems (pkgs: { default = devShell pkgs; });
 
   apps = forAllSystems (pkgs: {
     ci = {
       type = "app";
       program = lib.getExe (pkgs.writeShellApplication {
         name = "${name}-ci";
-        runtimeInputs = everything pkgs;
+        runtimeInputs = everything pkgs ++ [ pkgs.nix ];
         # Each step is quoted whole on purpose: it expands when it runs.
         excludeShellChecks = [ "SC2016" ];
         text = ''
           cd "$(git rev-parse --show-toplevel)"
+          # The steps run inside the dev shell, so they get what a person
+          # gets there: the compiler environment, the SDK, the shell hooks.
+          if [ -z "''${IN_NIX_SHELL:-}" ]; then
+            exec nix develop .#default --command "$0" "$@"
+          fi
           step() { echo "▶ $1"; bash -c "$1"; }
         '' + lib.concatMapStrings (s: "step ${lib.escapeShellArg s}\n") steps;
       });
