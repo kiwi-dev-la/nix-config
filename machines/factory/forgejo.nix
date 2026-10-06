@@ -136,5 +136,9 @@ in
   systemd.services.gitea-runner-factory = {
     after = [ "forgejo-admin.service" ];
     requires = [ "forgejo-admin.service" ];
+    # The runner's dynamic user gets its state folder mounted noexec, and every
+    # job runs in it: a checked-out script or a downloaded tool could not run
+    # ("Permission denied"), which made every repository's CI red on the VM.
+    serviceConfig.ExecPaths = [ "/var/lib/private/gitea-runner" ];
   };
 }
