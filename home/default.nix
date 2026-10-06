@@ -92,7 +92,13 @@
     # ~/.zshrc.local, loaded last so they win, when they exist.
     envExtra = ''[ -f "$HOME/.zshenv.local" ] && . "$HOME/.zshenv.local"'';
     profileExtra = ''[ -f "$HOME/.zprofile.local" ] && . "$HOME/.zprofile.local"'';
-    initContent = lib.mkAfter ''[ -f "$HOME/.zshrc.local" ] && . "$HOME/.zshrc.local"'';
+    # After them, the Nix profile goes back in front: Homebrew's shellenv in a
+    # local file would otherwise put its git ahead of the guarded one.
+    initContent = lib.mkAfter ''
+      [ -f "$HOME/.zshrc.local" ] && . "$HOME/.zshrc.local"
+      path=("/etc/profiles/per-user/$USER/bin" "/run/current-system/sw/bin" $path)
+      typeset -U path
+    '';
   };
 
   programs.starship.enable = true;   # prompt
