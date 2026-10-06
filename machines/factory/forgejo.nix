@@ -133,6 +133,9 @@ in
       name = "factory";
       url = "http://127.0.0.1:${toString httpPort}";
       tokenFile = runnerToken;
+      # Three jobs at once (the VM has 4 cores, 16 GB): one repository's long
+      # build does not hold up every other repository's check.
+      settings.runner.capacity = 3;
       labels = forge.runner.labels.linux;
       hostPackages = [ forgeTools.packages.forge-ci ]
         ++ (with pkgs; [ bash coreutils curl gawk git gnused jq nix nodejs wget ]);
