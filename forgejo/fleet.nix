@@ -39,6 +39,9 @@
 , gate ? null
 , shell ? (pkgs: { })
 , systems ? [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ]
+  # A gate step that runs longer is stopped and fails the gate, so a hung
+  # test costs minutes, not the job's whole hour.
+, stepTimeout ? "20m"
 }:
 let
   inherit (nixpkgs) lib;
@@ -126,17 +129,48 @@ assert lib.assertMsg (steps != [ ]) "nix/fleet.nix: ${name} has no gate: name a 
       type = "app";
       program = lib.getExe (pkgs.writeShellApplication {
         name = "${name}-ci";
-        runtimeInputs = everything pkgs ++ [ pkgs.nix ];
+        runtimeInputs = everything pkgs ++ [ pkgs.nix ]
+          ++ lib.optional pkgs.stdenv.hostPlatform.isLinux pkgs.util-linux; # flock
         # Each step is quoted whole on purpose: it expands when it runs.
         excludeShellChecks = [ "SC2016" ];
         text = ''
           cd "$(git rev-parse --show-toplevel)"
+          # In CI (the runner sets CI) every job checks out into a new folder,
+          # and build caches are keyed on the project's path (zig's is), so
+          # every run would build from nothing. The gate runs instead in one
+          # lasting checkout per repository on the runner, synced to this
+          # job's commit: tracked files exactly as committed, untracked files
+          # removed, the build caches kept. One job per repository uses it
+          # at a time; other repositories' jobs run alongside.
+          if [ -n "''${CI:-}" ] && [ -z "''${FLEET_CHECKOUT:-}" ]; then
+            FLEET_CHECKOUT="''${FLEET_CACHE:-''${XDG_CACHE_HOME:-$HOME/.cache}/fleet}/${name}"
+            export FLEET_CHECKOUT
+            mkdir -p "$FLEET_CHECKOUT"
+            if command -v flock >/dev/null; then
+              exec 9>"$FLEET_CHECKOUT.lock"
+              flock 9
+            fi
+            job=$PWD
+            commit=$(git rev-parse HEAD)
+            cd "$FLEET_CHECKOUT"
+            [ -d .git ] || git init -q
+            git fetch -q --no-tags "$job" "$commit"
+            git checkout -q -f --detach "$commit"
+            git clean -q -ffdx -e .zig-cache -e target -e node_modules
+            echo "gate: in $FLEET_CHECKOUT at $commit (build caches kept)"
+          fi
           # The steps run inside the dev shell, so they get what a person
           # gets there: the compiler environment, the SDK, the shell hooks.
           if [ -z "''${IN_NIX_SHELL:-}" ]; then
             exec nix develop .#default --command "$0" "$@"
           fi
-          step() { echo "▶ $1"; bash -c "$1"; }
+          step() {
+            echo "▶ $1"
+            local rc=0
+            timeout -k 30s ${stepTimeout} bash -c "$1" || rc=$?
+            if [ "$rc" -eq 124 ]; then echo "✗ stopped after ${stepTimeout}: $1" >&2; fi
+            [ "$rc" -eq 0 ] || exit "$rc"
+          }
         '' + lib.concatMapStrings (s: "step ${lib.escapeShellArg s}\n") steps;
       });
     };
