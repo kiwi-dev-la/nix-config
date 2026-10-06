@@ -1,5 +1,5 @@
-# Put the fleet's CI workflow in every declared repo of the forge, as a commit
-# on its default branch. Safe to run again: a repo that already carries the
+# Put the fleet's files (the CI workflow, nix/fleet.nix) in every declared repo
+# of the forge, as commits on its default branch. Safe to run again: a repo that already carries the
 # same file is left alone. `forge-workflows --check` changes nothing and exits
 # non-zero if any repo differs.
 
@@ -29,17 +29,19 @@ for repo in $FORGE_REPOS; do
 
   [ "$actions" = true ] ||
     jq -n '{has_actions: true}' | api "/repos/$FORGE_ORG/$repo" --request PATCH --data @- >/dev/null
-  if ! workflow_in_place "$repo"; then
+  for f in $fleet_files; do
+    path=${f%%=*} source=${f#*=}
+    file_in_place "$repo" "$path" "$source" && continue
     # The file's current blob id, when the repo already has one at that path.
-    blob="$(api "/repos/$FORGE_ORG/$repo/contents/$workflow_path" 2>/dev/null | jq -r '.sha // empty' || true)"
-    jq -n --arg content "$(base64 --wrap=0 <"$FORGE_WORKFLOW")" \
-      --arg branch "$(jq -r .default_branch <<<"$info")" --arg blob "$blob" \
+    blob="$(api "/repos/$FORGE_ORG/$repo/contents/$path" 2>/dev/null | jq -r '.sha // empty' || true)"
+    jq -n --arg content "$(base64 --wrap=0 <"$source")" \
+      --arg branch "$(jq -r .default_branch <<<"$info")" --arg blob "$blob" --arg path "$path" \
       '{content: $content, branch: $branch}
-       + (if $blob == "" then {message: "Add the fleet CI workflow"}
-          else {message: "Replace the CI workflow with the fleet one", sha: $blob} end)' |
-      api "/repos/$FORGE_ORG/$repo/contents/$workflow_path" \
+       + (if $blob == "" then {message: ("Add the fleet'"'"'s " + $path)}
+          else {message: ("Replace " + $path + " with the fleet'"'"'s"), sha: $blob} end)' |
+      api "/repos/$FORGE_ORG/$repo/contents/$path" \
         --request "$([ -n "$blob" ] && echo PUT || echo POST)" --data @- >/dev/null
-  fi
+  done
   echo "stamped  $repo"
 done
 [ -z "$check" ] || exit "$different"

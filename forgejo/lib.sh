@@ -22,11 +22,20 @@ api() {
     "$@" "$FORGE_URL/api/v1$path"
 }
 
-# Whether <repo> carries the fleet's CI workflow, byte for byte.
-workflow_path=.forgejo/workflows/ci.yml
+# The files every repo carries from here, as "<path in the repo>=<source>":
+# the CI workflow, and the Nix template its flake builds on (fleet.nix).
+fleet_files=".forgejo/workflows/ci.yml=$FORGE_WORKFLOW nix/fleet.nix=$FORGE_FLEET_NIX"
+
+# Whether <repo> carries <path> exactly as <source>.
+file_in_place() {
+  api "/repos/$FORGE_ORG/$1/contents/$2" 2>/dev/null |
+    jq -r '.content // ""' | base64 --decode 2>/dev/null | cmp --silent - "$3"
+}
+
+# Whether <repo> carries every fleet file, byte for byte.
 workflow_in_place() {
-  api "/repos/$FORGE_ORG/$1/contents/$workflow_path" 2>/dev/null |
-    jq -r '.content // ""' | base64 --decode 2>/dev/null | cmp --silent - "$FORGE_WORKFLOW"
+  local f
+  for f in $fleet_files; do file_in_place "$1" "${f%%=*}" "${f#*=}" || return 1; done
 }
 
 healthy() {
