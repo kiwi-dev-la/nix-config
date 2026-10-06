@@ -24,6 +24,9 @@ rec {
       nixos-anywhere
       openssh
       coreutils
+      findutils
+      gnugrep
+      sqlite
     ];
     runtimeEnv = {
       QEMU_SHARE = "${pkgs.qemu}/share/qemu";
