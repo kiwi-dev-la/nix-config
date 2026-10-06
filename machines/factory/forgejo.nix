@@ -136,9 +136,22 @@ in
   systemd.services.gitea-runner-factory = {
     after = [ "forgejo-admin.service" ];
     requires = [ "forgejo-admin.service" ];
-    # The runner's dynamic user gets its state folder mounted noexec, and every
-    # job runs in it: a checked-out script or a downloaded tool could not run
-    # ("Permission denied"), which made every repository's CI red on the VM.
-    serviceConfig.ExecPaths = [ "/var/lib/private/gitea-runner" ];
+    # A real user, not systemd's dynamic one. A dynamic user's state folder is
+    # mounted noexec (no checked-out script could run) and reached through a
+    # symlink (/var/lib/gitea-runner -> /var/lib/private/gitea-runner), which
+    # breaks a build that walks `../` from one to the other (lightwave-sys's
+    # zig dependency spawning its own build tool). systemd moves the state back
+    # out of /var/lib/private when DynamicUser goes off.
+    serviceConfig = {
+      DynamicUser = lib.mkForce false;
+      User = "gitea-runner";
+      Group = "gitea-runner";
+    };
   };
+  users.users.gitea-runner = {
+    isSystemUser = true;
+    group = "gitea-runner";
+    home = "/var/lib/gitea-runner";
+  };
+  users.groups.gitea-runner = { };
 }
