@@ -87,6 +87,12 @@
       cat = "bat --paging=never";
       rebuild = "sudo darwin-rebuild switch --flake ~/dev/nix-config";
     };
+    # This Mac's own shell setup, kept out of the repository (it holds
+    # personal paths and keys): ~/.zshenv.local, ~/.zprofile.local and
+    # ~/.zshrc.local, loaded last so they win, when they exist.
+    envExtra = ''[ -f "$HOME/.zshenv.local" ] && . "$HOME/.zshenv.local"'';
+    profileExtra = ''[ -f "$HOME/.zprofile.local" ] && . "$HOME/.zprofile.local"'';
+    initContent = lib.mkAfter ''[ -f "$HOME/.zshrc.local" ] && . "$HOME/.zshrc.local"'';
   };
 
   programs.starship.enable = true;   # prompt
