@@ -8,6 +8,8 @@ usage() {
   printf '%s\n' '  factory-vm ssh [..]  shell (or a command) in the VM as joel' >&2
   printf '%s\n' '  factory-vm switch [flake]   apply a configuration; default is the one this' >&2
   printf '%s\n' '                              command was built from, or e.g. github:kiwi-dev-la/nix-config' >&2
+  printf '%s\n' '  factory-vm secret set <name>   store a secret in the VM, read from stdin (never from an argument)' >&2
+  printf '%s\n' '  factory-vm secret list         which secrets the VM holds (names only)' >&2
   printf '%s\n' '  factory-vm backup [--disk]  copy the forge and the tickets to the NAS; with --disk,' >&2
   printf '%s\n' '                              also the whole VM disk (the VM is stopped meanwhile)' >&2
   printf '%s\n' '  factory-vm stop      shut it down' >&2
@@ -160,6 +162,25 @@ switch() {
   vm_ssh root@127.0.0.1 nixos-rebuild switch --flake "$ref#factory"
 }
 
+# secret set <name>: the value comes in on stdin and lands in the VM as
+# /home/joel/.factory-secrets/<name>, mode 600. It is never an argument, so it
+# never shows in a process list or a shell history on either side.
+secret() {
+  running || die "the VM is not running; run: factory-vm up"
+  local name=${2:-}
+  case "${1:-}" in
+    set)
+      [[ $name =~ ^[a-z][a-z0-9-]*$ ]] || die "secret set needs a name like claude-token"
+      [[ ! -t 0 ]] || die "pipe the value in: <command that prints it> | factory-vm secret set $name"
+      vm_ssh joel@127.0.0.1 "umask 077 && mkdir -p ~/.factory-secrets && tr -d '\\n' >~/.factory-secrets/$name.tmp && [ -s ~/.factory-secrets/$name.tmp ] && mv ~/.factory-secrets/$name.tmp ~/.factory-secrets/$name" \
+        || die "nothing was stored for $name (empty input?)"
+      say "stored $name"
+      ;;
+    list) vm_ssh joel@127.0.0.1 'ls ~/.factory-secrets 2>/dev/null || true' ;;
+    *) die "run: factory-vm secret set <name>  or  factory-vm secret list" ;;
+  esac
+}
+
 # backup [--disk]: the Mac pulls the forge's data and the fleet's state out of
 # the VM into one archive on the NAS, with the services stopped for the few
 # seconds the archive takes, and checks the copy. --disk also copies the VM's
@@ -215,6 +236,10 @@ case "${1:-}" in
   backup)
     shift
     backup "$@"
+    ;;
+  secret)
+    shift
+    secret "$@"
     ;;
   destroy)
     [[ ${2:-} == --yes ]] || die "this deletes the VM's disk; run: factory-vm destroy --yes"
