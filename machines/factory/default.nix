@@ -1,6 +1,6 @@
 # The factory: a NixOS machine that runs as a VM on the Mac (see vm/).
 # Everything dev-related and every always-on service lives here, not on macOS.
-{ pkgs, lib, modulesPath, lightwave-ai, ... }:
+{ config, pkgs, lib, modulesPath, lightwave-ai, ... }:
 let
   forge = import ../../forgejo/declaration.nix;
 in
@@ -23,6 +23,27 @@ in
     # Bound to 127.0.0.1 in the VM and not forwarded: it has no sign-in, so it
     # is reached through an ssh tunnel from the Mac only.
     nullhub.enable = true;
+  };
+
+  # The forge's service generates a token per factory account inside the VM
+  # (machines/factory/forgejo.nix); this puts a copy where the factory user
+  # reads them, mode 600, before the factory's own setup runs.
+  systemd.services.factory-forge-tokens = {
+    description = "Factory: the forge tokens of its accounts, for the factory user";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "forgejo-admin.service" ];
+    requires = [ "forgejo-admin.service" ];
+    before = [ "factory-setup.service" "factory-gate.service" "factory-nullboiler.service" ];
+    serviceConfig = { Type = "oneshot"; RemainAfterExit = true; };
+    script = ''
+      src=${config.services.forgejo.stateDir}/factory-tokens
+      dest=${config.services.factory.secretsDir}
+      install -d -m 700 -o ${config.services.factory.user} -g ${config.services.factory.group} "$dest"
+      for account in ${lib.escapeShellArgs ([ forge.bot ] ++ forge.personas)}; do
+        [ -s "$src/$account" ] || continue
+        install -m 600 -o ${config.services.factory.user} -g ${config.services.factory.group} "$src/$account" "$dest/forgejo-token.$account"
+      done
+    '';
   };
 
   networking.hostName = "factory";

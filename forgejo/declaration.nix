@@ -4,6 +4,12 @@
   port = 3300;
   org = "lightwave-media";
   admin = "joel";   # made by the VM on first boot
+  # The factory's own accounts, made by the VM with a token each generated
+  # inside it (machines/factory/forgejo.nix): one per persona, so every
+  # commit, pull request and review carries its author, and the gate's bot.
+  # They form the team `factory` with write on every repository of the org.
+  personas = [ "v_developer" "v_engineer" "v_staff-engineer" "v_cto" "jev" ];
+  bot = "factory";
   runner = {
     capacity = 1;
     # What a workflow's `runs-on` asks for, by the kind of host the runner is on.
