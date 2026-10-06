@@ -1,14 +1,21 @@
-{ config, pkgs, lib, ... }:
+{ config, pkgs, lib, lightwave-ai, ... }:
 
 {
   home.stateVersion = "26.11";
 
   home.packages = with pkgs; [
-    claude-code
     # The rules in AGENTS.md, enforced: this `git` wins over the one
     # programs.git installs, in every shell and not only in dev shells.
     (lib.hiPrio (import ../rules/git-guard.nix { inherit pkgs lib; }))
   ];
+
+  # Claude Code, with the skills plugin the factory's workers use, pinned by
+  # the same Nix fetch (lightwave-ai, factory/nix/skills.nix): it survives
+  # the erase, and a plugin update is a pin move there, never a hand install.
+  programs.claude-code = {
+    enable = true;
+    plugins.mattpocock-skills = lightwave-ai.packages.${pkgs.stdenv.hostPlatform.system}.mattpocock-skills;
+  };
 
   # Where GitButler's installer puts `but` (README, bootstrap step 6).
   home.sessionPath = [ "$HOME/.local/bin" ];

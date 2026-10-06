@@ -17,7 +17,7 @@
     # repository, read over SSH with this Mac's key; `factory-vm switch` ships
     # it to the VM with the rest of the inputs, so the VM never logs in
     # anywhere. Pinned to a commit; moved by the rule for program changes.
-    lightwave-ai.url = "git+ssh://git@github.com/lightwave-media/lightwave-ai?ref=factory/step1-integration&rev=ac0e0c1f685e950674f884a3be3b755957419154";
+    lightwave-ai.url = "git+ssh://git@github.com/lightwave-media/lightwave-ai?ref=refs/tags/factory-step1";
   };
 
   outputs = { self, nixpkgs, nix-darwin, home-manager, disko, lightwave-ai, ... }:
@@ -41,6 +41,7 @@
             home-manager.useGlobalPkgs = true;
             home-manager.useUserPackages = true;
             home-manager.backupFileExtension = "hm-backup";
+            home-manager.extraSpecialArgs = { inherit lightwave-ai; };
             home-manager.users.joelschaeffer = import ./home;
           }
         ];
