@@ -8,6 +8,8 @@ usage() {
   printf '%s\n' '  factory-vm ssh [..]  shell (or a command) in the VM as joel' >&2
   printf '%s\n' '  factory-vm switch [flake]   apply a configuration; default is the one this' >&2
   printf '%s\n' '                              command was built from, or e.g. github:kiwi-dev-la/nix-config' >&2
+  printf '%s\n' '  factory-vm switch --dev <branch> [flake]   the same, with lightwave-ai taken from a local' >&2
+  printf '%s\n' '                              branch (committed state) of ~/dev/lightwave-ai: an unreleased build' >&2
   printf '%s\n' '  factory-vm watch     the live view: the factory tmux session, read-only, in this terminal' >&2
   printf '%s\n' '  factory-vm secret set <name>   store a secret in the VM, read from stdin (never from an argument)' >&2
   printf '%s\n' '  factory-vm secret list         which secrets the VM holds (names only)' >&2
@@ -157,7 +159,24 @@ status() {
 
 switch() {
   running || die "the VM is not running; run: factory-vm up"
+  local dev="" tmp=""
+  if [[ ${1:-} == --dev ]]; then dev=${2:?usage: factory-vm switch --dev <branch> [flake]}; shift 2; fi
   local ref=${1:-$FLAKE} archived
+  # An unreleased build is the same configuration with one input moved: a
+  # copy of the flake whose lock points lightwave-ai at the branch's commit.
+  # Only committed work goes; the tag and the pin stay for proven builds.
+  if [[ -n $dev ]]; then
+    local repo=${LIGHTWAVE_AI_CHECKOUT:-$HOME/dev/lightwave-ai} rev
+    rev=$(git -C "$repo" rev-parse --verify "refs/heads/$dev^{commit}") || die "no branch $dev in $repo"
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"' RETURN
+    cp -R "$(nix flake archive --json "$ref" | jq -r .path)/." "$tmp/"
+    chmod -R u+w "$tmp"
+    nix flake lock "$tmp" --override-input lightwave-ai "git+file://$repo?ref=refs/heads/$dev&rev=$rev" ||
+      die "could not lock lightwave-ai to $dev"
+    say "switching to lightwave-ai $dev (${rev:0:9}), not a tag"
+    ref=$tmp
+  fi
   # The flake and every input it locks go into the VM's store first, so the
   # VM evaluates and builds from its store: a private input is read here, with
   # this Mac's SSH key, and never there.
