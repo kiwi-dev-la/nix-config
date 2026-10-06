@@ -82,7 +82,7 @@ in
       # (factory-forge-tokens in default.nix).
       tokens=${factoryTokens}
       mkdir -p "$tokens"
-      for account in ${lib.escapeShellArgs ([ forge.bot ] ++ forge.personas)}; do
+      for account in ${lib.escapeShellArgs ([ forge.bot ] ++ forge.personas ++ forge.operators)}; do
         if ! forgejo admin user list | awk '{print $2}' | grep -qx "$account"; then
           forgejo admin user create --username "$account" --email "$account@factory.local" \
             --password "$(openssl rand -hex 16)" --must-change-password=false
@@ -109,7 +109,7 @@ in
         if [ -z "$team" ]; then
           team=$(api -X POST "$base/orgs/${forge.org}/teams" -d '{"name":"factory","description":"The factory: its personas and its gate","permission":"write","includes_all_repositories":true,"can_create_org_repo":false,"units":["repo.code","repo.issues","repo.pulls","repo.releases","repo.wiki","repo.projects","repo.actions"]}' | jq -r .id)
         fi
-        for account in ${lib.escapeShellArgs ([ forge.bot ] ++ forge.personas)}; do
+        for account in ${lib.escapeShellArgs ([ forge.bot ] ++ forge.personas ++ forge.operators)}; do
           api -X PUT "$base/teams/$team/members/$account" >/dev/null 2>&1 || echo "forgejo-admin: could not add $account to the factory team" >&2
         done
       else
