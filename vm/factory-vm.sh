@@ -194,7 +194,24 @@ secret() {
 # units, and the transient ones of the hand-run factory (absent ones are
 # skipped). The paths are those that exist in the VM.
 fleet_stop='systemctl stop forgejo factory-gate.timer factory-gate factory-nullboiler factory-nullwatch factory-nulltickets nullhub-exp nullboiler-factory 2>/dev/null || true'
-fleet_start='systemctl start forgejo; systemctl start factory-nulltickets factory-nullwatch factory-nullboiler factory-gate.timer nullhub-exp 2>/dev/null || true'
+# The hand-run layout's two units are transient (systemd-run) and cannot be
+# started back by name: they are recreated the way the hand setup made them,
+# when their programs exist. The module's units start by name.
+# shellcheck disable=SC2016  # runs in the VM
+fleet_start='systemctl start forgejo
+  systemctl start factory-nulltickets factory-nullwatch factory-nullboiler factory-gate.timer 2>/dev/null || true
+  if [ -x /home/joel/.nullhub/bin/nullhub ] && ! systemctl is-active -q nullhub-exp; then
+    systemctl reset-failed nullhub-exp 2>/dev/null || true
+    systemd-run --unit=nullhub-exp --uid=joel --gid=users -p WorkingDirectory=/home/joel -p EnvironmentFile=/home/joel/.factory-env \
+      -E HOME=/home/joel -E PATH=/run/current-system/sw/bin:/run/wrappers/bin:/home/joel/.factory-bin \
+      /home/joel/.nullhub/bin/nullhub serve --no-open >/dev/null 2>&1 || true
+  fi
+  if [ -x /home/joel/factory/bin/fleet-up ] && ! systemctl is-active -q nullboiler-factory; then
+    systemctl reset-failed nullboiler-factory 2>/dev/null || true
+    sudo -u joel env PATH=/home/joel/.factory-bin:/run/current-system/sw/bin:/run/wrappers/bin HOME=/home/joel \
+      FACTORY_HOME=/home/joel/factory FACTORY_NULLBOILER_HOME=/home/joel/factory/state/nullboiler /home/joel/factory/bin/fleet-up >/dev/null 2>&1 || true
+  fi'
+
 # shellcheck disable=SC2016  # the loop runs in the VM, not here
 fleet_paths='for p in var/lib/forgejo var/lib/factory home/joel/.nullhub home/joel/factory/state home/joel/factory-hooks home/joel/.factory-pipeline; do [ -e "/$p" ] && echo "$p"; done'
 
