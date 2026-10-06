@@ -1,0 +1,7 @@
+{
+  "name": "factory",
+  "version": "0.1.0",
+  "description": "Use the Lightwave factory from Claude Code: file work as forge issues the factory turns into tickets, check tickets, pull requests, reviews and CI on the local forge, land branches forge first.",
+  "author": { "name": "Lightwave Media" },
+  "keywords": ["factory", "forgejo", "nix", "ci"]
+}
