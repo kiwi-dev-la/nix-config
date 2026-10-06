@@ -60,6 +60,7 @@ let
       FORGE_REPOS=${lib.escapeShellArg (lib.concatStringsSep " " forge.repos)}
       FORGE_RUNNER_CONFIG=${runnerConfig}
       FORGE_WORKFLOW=${workflow}
+      FORGE_FLEET_NIX=${./fleet.nix}
       FORGE_CI_BIN=${forge-ci}/bin
       FORGE_TOOL_PATH=${lib.makeBinPath inputs}
     '' + builtins.readFile ./lib.sh + builtins.readFile (./. + "/${name}.sh");

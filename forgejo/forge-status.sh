@@ -19,6 +19,6 @@ for repo in $FORGE_REPOS; do
   if workflow_in_place "$repo"; then stamped=$((stamped + 1)); fi
 done
 [ "$stamped" = "$present" ] ||
-  die "UP ($version) but $((present - stamped)) of $present repos lack the fleet's CI workflow; run forge-workflows"
+  die "UP ($version) but $((present - stamped)) of $present repos lack the fleet's files (CI workflow, nix/fleet.nix); run forge-workflows"
 
 echo "forge: UP $FORGE_URL  forgejo $version  org $FORGE_ORG  repos $repos  workflows $stamped/$present  runner $runner_name $runner"
