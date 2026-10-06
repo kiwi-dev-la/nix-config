@@ -1,4 +1,4 @@
-{ pkgs, lib, ... }:
+{ config, pkgs, lib, ... }:
 
 {
   home.stateVersion = "26.11";
@@ -13,10 +13,16 @@
   # Where GitButler's installer puts `but` (README, bootstrap step 6).
   home.sessionPath = [ "$HOME/.local/bin" ];
 
+  # Cursor reads its skills from ~/.cursor/skills. They live under ~/.lightwave
+  # with the rest of the agent-harness state, so that path is a link there.
+  home.file.".cursor/skills".source =
+    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.lightwave/skills";
+
   # GitButler's skill for each coding agent, written by `but` itself so it
-  # matches the installed CLI. Runs on every rebuild; a Mac that has no `but`
-  # yet is told and skipped, never failed.
-  home.activation.gitbutlerSkills = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+  # matches the installed CLI. Runs on every rebuild, after the link above
+  # exists; a Mac that has no `but` yet is told and skipped, never failed.
+  home.activation.gitbutlerSkills = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+    run mkdir -p "$HOME/.lightwave/skills"
     but="$HOME/.local/bin/but"
     if [ -x "$but" ]; then
       for agent in .claude .codex .cursor; do
