@@ -45,17 +45,17 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1791266573,
-        "narHash": "sha256-3DxFdLqNaT6C7Pagj9cAw/vzbVJrvL1MO1FfsNhT4mg=",
+        "lastModified": 1791266805,
+        "narHash": "sha256-MS/UPfinNiyY4pJycp8djHLzJM4uEhQ7pJFKvrXIRIk=",
         "ref": "factory/step1-integration",
-        "rev": "bd2470282657c382cc18d280e6835b3ab329f2a8",
-        "revCount": 3724,
+        "rev": "f06e5ff474ccf59285c377f211699e2876e6635a",
+        "revCount": 3725,
         "type": "git",
         "url": "ssh://git@github.com/lightwave-media/lightwave-ai"
       },
       "original": {
         "ref": "factory/step1-integration",
-        "rev": "bd2470282657c382cc18d280e6835b3ab329f2a8",
+        "rev": "f06e5ff474ccf59285c377f211699e2876e6635a",
         "type": "git",
         "url": "ssh://git@github.com/lightwave-media/lightwave-ai"
       }
