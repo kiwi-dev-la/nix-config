@@ -8,6 +8,8 @@
 let
   cfg = config.services.forgejo;
   forge = import ../../forgejo/declaration.nix; # port, admin, runner labels
+  # The fleet's one CI command, which every repository's workflow runs.
+  forgeTools = import ../../forgejo { inherit pkgs lib; gitGuard = import ../../rules/git-guard.nix { inherit pkgs lib; }; };
   httpPort = forge.port; # forwarded to the Mac in vm/default.nix
   sshPort = 2222; # the port vm/factory-vm.sh forwards to the VM's sshd
   runnerToken = "${cfg.stateDir}/runner-token";
@@ -127,7 +129,8 @@ in
       url = "http://127.0.0.1:${toString httpPort}";
       tokenFile = runnerToken;
       labels = forge.runner.labels.linux;
-      hostPackages = with pkgs; [ bash coreutils curl gawk git gnused jq nix nodejs wget ];
+      hostPackages = [ forgeTools.packages.forge-ci ]
+        ++ (with pkgs; [ bash coreutils curl gawk git gnused jq nix nodejs wget ]);
     };
   };
   systemd.services.gitea-runner-factory = {
