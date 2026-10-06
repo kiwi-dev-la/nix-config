@@ -19,6 +19,10 @@ in
     enable = true;
     forgeOwner = forge.org;
     repos = map (name: { inherit name; workers = 2; }) forge.repos;
+    # The web page over the factory's services (nullhub embeds its dashboard).
+    # Bound to 127.0.0.1 in the VM and not forwarded: it has no sign-in, so it
+    # is reached through an ssh tunnel from the Mac only.
+    nullhub.enable = true;
   };
 
   networking.hostName = "factory";
