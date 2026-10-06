@@ -18,7 +18,9 @@ in
   services.factory = {
     enable = true;
     forgeOwner = forge.org;
-    repos = map (name: { inherit name; workers = 2; }) forge.repos;
+    # Every pull request the factory opens is reviewed by v_staff-engineer
+    # (Claude Code) before it merges.
+    repos = map (name: { inherit name; workers = 2; review = true; }) forge.repos;
     # The web page over the factory's services (nullhub embeds its dashboard).
     # Bound to 127.0.0.1 in the VM and not forwarded: it has no sign-in, so it
     # is reached through an ssh tunnel from the Mac only.
