@@ -15,6 +15,8 @@ usage() {
   printf '%s\n' '                              also the whole VM disk (the VM is stopped meanwhile)' >&2
   printf '%s\n' '  factory-vm stop      shut it down' >&2
   printf '%s\n' '  factory-vm destroy --yes    stop it and delete its disk' >&2
+  printf '%s\n' '  A second VM beside the first: FACTORY_VM_STATE=<dir> FACTORY_VM_SSH_PORT=2223' >&2
+  printf '%s\n' '  FACTORY_VM_FORWARDS="3301:3300" factory-vm up   (the same for every command on it)' >&2
 }
 
 STATE="${FACTORY_VM_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/factory-vm}"
@@ -154,13 +156,14 @@ status() {
 
 switch() {
   running || die "the VM is not running; run: factory-vm up"
-  local ref=${1:-}
-  if [[ -z $ref ]]; then
-    ref=$FLAKE
-    NIX_SSHOPTS="${ssh_opts[*]} -o StrictHostKeyChecking=yes" \
-      nix copy --to "ssh-ng://root@127.0.0.1" "$FLAKE"
-  fi
-  vm_ssh root@127.0.0.1 nixos-rebuild switch --flake "$ref#factory"
+  local ref=${1:-$FLAKE} archived
+  # The flake and every input it locks go into the VM's store first, so the
+  # VM evaluates and builds from its store: a private input is read here, with
+  # this Mac's SSH key, and never there.
+  archived=$(NIX_SSHOPTS="${ssh_opts[*]} -o StrictHostKeyChecking=yes" \
+    nix flake archive --json --to "ssh-ng://root@127.0.0.1" "$ref" | jq -r .path)
+  [[ -n $archived ]] || die "could not send $ref to the VM"
+  vm_ssh root@127.0.0.1 nixos-rebuild switch --flake "$archived#factory"
 }
 
 # secret set <name>: the value comes in on stdin and lands in the VM as

@@ -27,6 +27,7 @@ rec {
       findutils
       gnugrep
       sqlite
+      jq
     ];
     runtimeEnv = {
       QEMU_SHARE = "${pkgs.qemu}/share/qemu";

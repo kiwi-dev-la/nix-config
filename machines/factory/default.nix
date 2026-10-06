@@ -1,12 +1,24 @@
 # The factory: a NixOS machine that runs as a VM on the Mac (see vm/).
 # Everything dev-related and every always-on service lives here, not on macOS.
-{ pkgs, lib, modulesPath, ... }:
+{ pkgs, lib, modulesPath, lightwave-ai, ... }:
+let
+  forge = import ../../forgejo/declaration.nix;
+in
 {
   imports = [
     (modulesPath + "/profiles/qemu-guest.nix")
     ./disk.nix
     ./forgejo.nix
+    lightwave-ai.nixosModules.factory
   ];
+
+  # The factory: nulltickets, nullwatch, nullboiler and the gate as services,
+  # one clone per declared repository, the hooks and personas from
+  # lightwave-ai. Secrets are placed with `factory-vm secret set`.
+  services.factory = {
+    enable = true;
+    repos = map (name: { inherit name; workers = 2; }) forge.repos;
+  };
 
   networking.hostName = "factory";
   time.timeZone = "America/Los_Angeles";
@@ -57,8 +69,8 @@
     tmux
     sqlite
   ];
-  # Claude Code is unfree; nothing else on this machine is.
-  nixpkgs.config.allowUnfreePredicate = pkg: builtins.elem (lib.getName pkg) [ "claude-code" ];
+  # Claude Code and GitButler (FSL) are unfree; nothing else on this machine is.
+  nixpkgs.config.allowUnfreePredicate = pkg: builtins.elem (lib.getName pkg) [ "claude-code" "but" ];
 
   # The rules file agents read, at the top of the dev folder.
   systemd.tmpfiles.rules = [

@@ -12,9 +12,15 @@
 
     disko.url = "github:nix-community/disko";
     disko.inputs.nixpkgs.follows = "nixpkgs";
+
+    # The factory's definition (NixOS module, programs, scripts). A private
+    # repository, read over SSH with this Mac's key; `factory-vm switch` ships
+    # it to the VM with the rest of the inputs, so the VM never logs in
+    # anywhere. Pinned to a commit; moved by the rule for program changes.
+    lightwave-ai.url = "git+ssh://git@github.com/lightwave-media/lightwave-ai?ref=factory/step1-integration&rev=78109e99defa1449a435ce1b4c7b1f3c11d586db";
   };
 
-  outputs = { self, nixpkgs, nix-darwin, home-manager, disko, ... }:
+  outputs = { self, nixpkgs, nix-darwin, home-manager, disko, lightwave-ai, ... }:
     let
       inherit (nixpkgs) lib;
       forEachSystem = f: lib.genAttrs [ "aarch64-darwin" "aarch64-linux" "x86_64-linux" ]
@@ -43,6 +49,7 @@
       # The factory: NixOS in a VM on the Mac. `nix run .#factory-vm -- up`
       nixosConfigurations.factory = lib.nixosSystem {
         system = "aarch64-linux";
+        specialArgs = { inherit lightwave-ai; };
         modules = [ disko.nixosModules.disko ./machines/factory ];
       };
 
