@@ -33,6 +33,11 @@ in
       actions.ENABLED = true;
       # http://127.0.0.1:3300/metrics, for Prometheus.
       metrics.ENABLED = true;
+      # Webhooks may call the factory's receiver inside this machine.
+      webhook.ALLOWED_HOST_LIST = "loopback";
+      # The org's npm (and container) registry: the fleet installs
+      # @lightwave-media packages from here, not from GitHub Packages.
+      packages.ENABLED = true;
     };
   };
 
