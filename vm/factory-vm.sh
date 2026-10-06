@@ -10,6 +10,8 @@ usage() {
   printf '%s\n' '                              command was built from, or e.g. github:kiwi-dev-la/nix-config' >&2
   printf '%s\n' '  factory-vm switch --dev <branch> [flake]   the same, with lightwave-ai taken from a local' >&2
   printf '%s\n' '                              branch (committed state) of ~/dev/lightwave-ai: an unreleased build' >&2
+  printf '%s\n' '  factory-vm sync <repo>   bring GitHub main into the forge main (fast-forward, or a merge that' >&2
+  printf '%s\n' '                              keeps forge-only commits); nothing is pushed to GitHub' >&2
   printf '%s\n' '  factory-vm watch     the live view: the factory tmux session, read-only, in this terminal' >&2
   printf '%s\n' '  factory-vm secret set <name>   store a secret in the VM, read from stdin (never from an argument)' >&2
   printf '%s\n' '  factory-vm secret list         which secrets the VM holds (names only)' >&2
@@ -186,6 +188,53 @@ switch() {
   vm_ssh root@127.0.0.1 nixos-rebuild switch --flake "$archived#factory"
 }
 
+# The Mac's port for the VM's forge (3300 inside), from the forwards.
+forge_port() {
+  local f
+  for f in "${forwards[@]}"; do [[ ${f#*:} == 3300 ]] && { echo "${f%%:*}"; return; }; done
+  echo 3300
+}
+
+# sync <repo>: the forge's main gets GitHub's main. Work merged on GitHub
+# (by hand, before the factory took a repository over) would otherwise never
+# reach the forge, and the factory would build on an old main. A fast-forward
+# when the forge has nothing of its own; else a merge that keeps the forge's
+# commits (the CI workflow stamp, the factory's merges). The other direction
+# is the release step's: GitHub only receives what was proven.
+sync() {
+  running || die "the VM is not running; run: factory-vm up"
+  local repo=${1:?usage: factory-vm sync <repo>} port token
+  local org=${FACTORY_FORGE_ORG:-lightwave-media} gh_org=${FACTORY_GITHUB_ORG:-lightwave-media}
+  port=$(forge_port)
+  token=$(vm_ssh root@127.0.0.1 cat /var/lib/forgejo/factory-tokens/_admin) || die "the VM has no forge admin token"
+  (
+    work=$(mktemp -d)
+    trap 'rm -rf "$work"' EXIT
+    forge="http://127.0.0.1:$port/$org/$repo.git"
+    # The token reaches git through its config, for the forge's address only.
+    export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="http.http://127.0.0.1:$port/.extraHeader" GIT_CONFIG_VALUE_0="Authorization: token $token"
+    g() { git -C "$work" -c user.name=factory -c user.email=factory@factory.local "$@"; }
+    g init -q
+    g fetch -q "git@github.com:$gh_org/$repo.git" "+refs/heads/main:refs/sync/github" || die "could not fetch $gh_org/$repo from GitHub"
+    g fetch -q "$forge" "+refs/heads/main:refs/sync/forge" || die "could not fetch $org/$repo from the forge"
+    if g merge-base --is-ancestor refs/sync/github refs/sync/forge; then
+      say "$org/$repo: the forge's main already has GitHub's main"
+      exit 0
+    fi
+    if g merge-base --is-ancestor refs/sync/forge refs/sync/github; then
+      target=refs/sync/github
+      say "$org/$repo: fast-forward to GitHub's $(g rev-parse --short refs/sync/github)"
+    else
+      g checkout -q --detach refs/sync/forge
+      g merge -q --no-edit -m "Merge GitHub's main into the forge's main" refs/sync/github ||
+        die "$org/$repo: GitHub's main and the forge's conflict; merge by hand"
+      target=HEAD
+      say "$org/$repo: merged GitHub's $(g rev-parse --short refs/sync/github) into the forge's main"
+    fi
+    g push -q "$forge" "$target:refs/heads/main" || die "$org/$repo: the forge refused the push"
+  )
+}
+
 # secret set <name>: the value comes in on stdin and lands in the VM as
 # /home/joel/.factory-secrets/<name>, mode 600. It is never an argument, so it
 # never shows in a process list or a shell history on either side.
@@ -345,6 +394,10 @@ case "${1:-}" in
   secret)
     shift
     secret "$@"
+    ;;
+  sync)
+    shift
+    sync "$@"
     ;;
   watch)
     running || die "the VM is not running; run: factory-vm up"
