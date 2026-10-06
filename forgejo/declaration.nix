@@ -29,6 +29,8 @@
   ci.runsOn = "macos";
   # forge-seed copies these from github.com/<githubOrg>.
   githubOrg = "lightwave-media";
+  # Repos whose GitHub copy lives under another owner than githubOrg.
+  githubSources = { nix-config = "kiwi-dev-la"; };
   repos = [
     "lightwave-core"
     "lightwave-cli"
@@ -43,5 +45,8 @@
     "joelschaeffer-site"
     "createOS"
     "pipelines-workflows"
+    # This repository: the forge, the factory and the Mac, changed through the
+    # factory like any other (CODEOWNERS names who approves what).
+    "nix-config"
   ];
 }

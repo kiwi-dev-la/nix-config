@@ -19,8 +19,10 @@ for repo in $FORGE_REPOS; do
     echo "present  $repo"
     continue
   fi
+  src="$FORGE_GITHUB_ORG"
+  for pair in $FORGE_GITHUB_SOURCES; do [ "${pair%%=*}" = "$repo" ] && src="${pair#*=}"; done
   if jq -n \
-    --arg addr "https://github.com/$FORGE_GITHUB_ORG/$repo.git" \
+    --arg addr "https://github.com/$src/$repo.git" \
     --arg owner "$FORGE_ORG" --arg name "$repo" \
     '{clone_addr: $addr, repo_owner: $owner, repo_name: $name, service: "github", mirror: false, private: true}
      + (if env.FORGE_GH_TOKEN != "" then {auth_token: env.FORGE_GH_TOKEN} else {} end)' |
