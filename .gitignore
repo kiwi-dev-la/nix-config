@@ -3,3 +3,6 @@ result-*
 .direnv
 .DS_Store
 *.swp
+
+# Zig build caches (a zig build run in the checkout leaves one)
+.zig-cache/
