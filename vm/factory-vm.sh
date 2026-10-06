@@ -13,8 +13,11 @@ usage() {
   printf '%s\n' '  factory-vm secret list         which secrets the VM holds (names only)' >&2
   printf '%s\n' '  factory-vm backup [--disk]  copy the forge and the tickets to the NAS; with --disk,' >&2
   printf '%s\n' '                              also the whole VM disk (the VM is stopped meanwhile)' >&2
+  printf '%s\n' '  factory-vm restore <backup folder>   put the forge and the tickets back from a backup' >&2
   printf '%s\n' '  factory-vm stop      shut it down' >&2
   printf '%s\n' '  factory-vm destroy --yes    stop it and delete its disk' >&2
+  printf '%s\n' '  A second VM beside the first: FACTORY_VM_STATE=<dir> FACTORY_VM_SSH_PORT=2223' >&2
+  printf '%s\n' '  FACTORY_VM_FORWARDS="3301:3300" factory-vm up   (the same for every command on it)' >&2
 }
 
 STATE="${FACTORY_VM_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/factory-vm}"
@@ -154,13 +157,14 @@ status() {
 
 switch() {
   running || die "the VM is not running; run: factory-vm up"
-  local ref=${1:-}
-  if [[ -z $ref ]]; then
-    ref=$FLAKE
-    NIX_SSHOPTS="${ssh_opts[*]} -o StrictHostKeyChecking=yes" \
-      nix copy --to "ssh-ng://root@127.0.0.1" "$FLAKE"
-  fi
-  vm_ssh root@127.0.0.1 nixos-rebuild switch --flake "$ref#factory"
+  local ref=${1:-$FLAKE} archived
+  # The flake and every input it locks go into the VM's store first, so the
+  # VM evaluates and builds from its store: a private input is read here, with
+  # this Mac's SSH key, and never there.
+  archived=$(NIX_SSHOPTS="${ssh_opts[*]} -o StrictHostKeyChecking=yes" \
+    nix flake archive --json --to "ssh-ng://root@127.0.0.1" "$ref" | jq -r .path)
+  [[ -n $archived ]] || die "could not send $ref to the VM"
+  vm_ssh root@127.0.0.1 nixos-rebuild switch --flake "$archived#factory"
 }
 
 # secret set <name>: the value comes in on stdin and lands in the VM as
@@ -186,6 +190,82 @@ secret() {
 # the VM into one archive on the NAS, with the services stopped for the few
 # seconds the archive takes, and checks the copy. --disk also copies the VM's
 # disk and firmware variables, which needs the VM stopped.
+# The services a backup or a restore stops, in both layouts: the module's
+# units, and the transient ones of the hand-run factory (absent ones are
+# skipped). The paths are those that exist in the VM.
+fleet_stop='systemctl stop gitea-runner-factory forgejo factory-gate.timer factory-gate factory-nullboiler factory-nullwatch factory-nulltickets nullhub-exp nullboiler-factory 2>/dev/null || true'
+# The hand-run layout's two units are transient (systemd-run) and cannot be
+# started back by name: they are recreated the way the hand setup made them,
+# when their programs exist. The module's units start by name.
+# shellcheck disable=SC2016  # runs in the VM
+fleet_start='systemctl start forgejo; systemctl start gitea-runner-factory 2>/dev/null || true
+  systemctl start factory-nulltickets factory-nullwatch factory-nullboiler factory-gate.timer 2>/dev/null || true
+  if [ -x /home/joel/.nullhub/bin/nullhub ] && ! systemctl is-active -q nullhub-exp; then
+    systemctl reset-failed nullhub-exp 2>/dev/null || true
+    systemd-run --unit=nullhub-exp --uid=joel --gid=users -p WorkingDirectory=/home/joel -p EnvironmentFile=/home/joel/.factory-env \
+      -E HOME=/home/joel -E PATH=/run/current-system/sw/bin:/run/wrappers/bin:/home/joel/.factory-bin \
+      /home/joel/.nullhub/bin/nullhub serve --no-open >/dev/null 2>&1 || true
+  fi
+  if [ -x /home/joel/factory/bin/fleet-up ] && ! systemctl is-active -q nullboiler-factory; then
+    systemctl reset-failed nullboiler-factory 2>/dev/null || true
+    sudo -u joel env PATH=/home/joel/.factory-bin:/run/current-system/sw/bin:/run/wrappers/bin HOME=/home/joel \
+      FACTORY_HOME=/home/joel/factory FACTORY_NULLBOILER_HOME=/home/joel/factory/state/nullboiler /home/joel/factory/bin/fleet-up >/dev/null 2>&1 || true
+  fi'
+
+# shellcheck disable=SC2016  # the loop runs in the VM, not here
+fleet_paths='for p in var/lib/forgejo var/lib/factory home/joel/.nullhub home/joel/factory/state home/joel/factory-hooks home/joel/.factory-pipeline; do [ -e "/$p" ] && echo "$p"; done'
+
+# restore <backup folder>: the forge and the factory's state come back from
+# a backup; the services are stopped meanwhile and started again. Secrets
+# are not in a backup: place them again with `factory-vm secret set`.
+restore() {
+  running || die "the VM is not running; run: factory-vm up"
+  local src=${1:-}
+  [[ -n $src && -f $src/factory-state.tgz ]] || die "restore needs a backup folder holding factory-state.tgz"
+  (cd "$src" && sha256sum -c --quiet SHA256SUMS) || die "the archive does not match its checksum"
+  say "stopping the forge and the fleet for the restore"
+  vm_ssh root@127.0.0.1 "$fleet_stop"
+  local rc=0
+  vm_ssh root@127.0.0.1 'tar -C / -xzf -' <"$src/factory-state.tgz" || rc=$?
+  # shellcheck disable=SC2016  # the script runs in the VM, not here
+  vm_ssh root@127.0.0.1 '
+    [ -e /var/lib/forgejo ] && chown -R forgejo:forgejo /var/lib/forgejo
+    for p in /var/lib/factory /home/joel/.nullhub /home/joel/factory /home/joel/factory-hooks /home/joel/.factory-pipeline; do
+      [ -e "$p" ] && chown -R joel:users "$p"
+    done; true'
+  # A backup of the hand-run layout restored onto the module's: the tickets,
+  # the traces and the run records move to /var/lib/factory, and the
+  # clones, pipelines and workflow files are made again from the restored forge.
+  # shellcheck disable=SC2016  # runs in the VM
+  vm_ssh root@127.0.0.1 '
+    [ -d /var/lib/factory ] || exit 0
+    h=/home/joel/.nullhub/instances
+    if [ -f $h/nulltickets/nulltickets-1/nulltickets.db ]; then
+      # The rows may still sit in the write-ahead log: fold it in first, and
+      # leave no stale log beside the copy.
+      sqlite3 $h/nulltickets/nulltickets-1/nulltickets.db "PRAGMA wal_checkpoint(TRUNCATE);" >/dev/null
+      rm -f /var/lib/factory/nulltickets/nulltickets.db-wal /var/lib/factory/nulltickets/nulltickets.db-shm
+      install -o joel -g users -m 640 $h/nulltickets/nulltickets-1/nulltickets.db /var/lib/factory/nulltickets/nulltickets.db
+    fi
+    if [ -d $h/nullwatch/nullwatch-1/data ]; then
+      rm -rf /var/lib/factory/nullwatch/data && cp -a $h/nullwatch/nullwatch-1/data /var/lib/factory/nullwatch/data && chown -R joel:users /var/lib/factory/nullwatch
+    fi
+    st=/home/joel/factory/state
+    [ -f $st/runs.jsonl ] && install -o joel -g users -m 640 $st/runs.jsonl /var/lib/factory/runs.jsonl
+    for d in logs pending; do [ -d $st/$d ] && cp -a $st/$d/. /var/lib/factory/$d/ && chown -R joel:users /var/lib/factory/$d; done
+    true'
+  # The runner registered with the forge this VM had before; the restored
+  # forge does not know it. Without its registration file it registers again,
+  # with the restored forge's runner token.
+  vm_ssh root@127.0.0.1 'rm -f /var/lib/private/gitea-runner/*/.runner /var/lib/gitea-runner/*/.runner 2>/dev/null; systemctl reset-failed gitea-runner-factory 2>/dev/null; true'
+  vm_ssh root@127.0.0.1 "$fleet_start"
+  ((rc == 0)) || die "the restore failed (exit $rc); the services are started again"
+  vm_ssh root@127.0.0.1 'systemctl list-unit-files factory-setup.service >/dev/null 2>&1 && systemctl restart factory-setup; true'
+
+  say "restored from $src; secrets are not in a backup, place them with: factory-vm secret set <name>"
+  status
+}
+
 backup() {
   running || die "the VM is not running; run: factory-vm up"
   [[ -d ${BACKUP_DIR%/*} ]] || die "the NAS share is not mounted at ${BACKUP_DIR%/*}"
@@ -193,11 +273,12 @@ backup() {
   dest=$BACKUP_DIR/$(date +%Y%m%d-%H%M%S)
   mkdir -p "$dest"
   say "stopping the forge and the fleet for the archive"
-  vm_ssh root@127.0.0.1 'systemctl stop forgejo; systemctl stop nullhub-exp 2>/dev/null || true'
+  vm_ssh root@127.0.0.1 "$fleet_stop"
   local rc=0
-  vm_ssh root@127.0.0.1 'tar -C / -czf - var/lib/forgejo home/joel/.nullhub home/joel/factory-hooks home/joel/.factory-pipeline 2>/dev/null' \
-    >"$dest/factory-state.tgz" || rc=$?
-  vm_ssh root@127.0.0.1 'systemctl start forgejo; systemctl start nullhub-exp 2>/dev/null || true'
+  # Whatever exists of either layout: the module's /var/lib/factory, and the
+  # hand-run factory's folders under /home/joel. Secrets are not archived.
+  vm_ssh root@127.0.0.1 "$fleet_paths"' | tar -C / -czf - -T -' >"$dest/factory-state.tgz" || rc=$?
+  vm_ssh root@127.0.0.1 "$fleet_start"
   ((rc == 0)) || die "the archive failed (exit $rc); the services are started again"
   tar -tzf "$dest/factory-state.tgz" >"$dest/factory-state.list" || die "the archive does not list"
   tmp=$(mktemp -d)
@@ -237,6 +318,10 @@ case "${1:-}" in
   backup)
     shift
     backup "$@"
+    ;;
+  restore)
+    shift
+    restore "$@"
     ;;
   secret)
     shift

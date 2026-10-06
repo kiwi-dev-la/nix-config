@@ -40,6 +40,26 @@
         "type": "github"
       }
     },
+    "lightwave-ai": {
+      "inputs": {
+        "nixpkgs": "nixpkgs"
+      },
+      "locked": {
+        "lastModified": 1791266944,
+        "narHash": "sha256-MYAY3NUwXm32zJQQLbAV3C5oq9ojpuJ3nG18pB7UHsY=",
+        "ref": "factory/step1-integration",
+        "rev": "ac0e0c1f685e950674f884a3be3b755957419154",
+        "revCount": 3726,
+        "type": "git",
+        "url": "ssh://git@github.com/lightwave-media/lightwave-ai"
+      },
+      "original": {
+        "ref": "factory/step1-integration",
+        "rev": "ac0e0c1f685e950674f884a3be3b755957419154",
+        "type": "git",
+        "url": "ssh://git@github.com/lightwave-media/lightwave-ai"
+      }
+    },
     "nix-darwin": {
       "inputs": {
         "nixpkgs": [
@@ -63,6 +83,22 @@
     },
     "nixpkgs": {
       "locked": {
+        "lastModified": 1789844176,
+        "narHash": "sha256-COQmpo4lFIzMgUjr3ntDpjH0NwrCnf7N0uhR+6WPGP8=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "79b35bf0bda5cd110f856aa5b5b2c5ba4460dbf5",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "79b35bf0bda5cd110f856aa5b5b2c5ba4460dbf5",
+        "type": "github"
+      }
+    },
+    "nixpkgs_2": {
+      "locked": {
         "lastModified": 1791011291,
         "narHash": "sha256-V6OBJccNKBo/ktknxlJXZChPoI0NE2lembArBO3CE9k=",
         "owner": "NixOS",
@@ -81,8 +117,9 @@
       "inputs": {
         "disko": "disko",
         "home-manager": "home-manager",
+        "lightwave-ai": "lightwave-ai",
         "nix-darwin": "nix-darwin",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs_2"
       }
     }
   },
