@@ -52,7 +52,13 @@
     curl
     jq
     htop
+    # The factory's workers and their live view.
+    claude-code
+    tmux
+    sqlite
   ];
+  # Claude Code is unfree; nothing else on this machine is.
+  nixpkgs.config.allowUnfreePredicate = pkg: builtins.elem (lib.getName pkg) [ "claude-code" ];
 
   # The rules file agents read, at the top of the dev folder.
   systemd.tmpfiles.rules = [
