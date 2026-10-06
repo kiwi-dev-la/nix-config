@@ -195,6 +195,7 @@ secret() {
 # skipped). The paths are those that exist in the VM.
 fleet_stop='systemctl stop forgejo factory-gate.timer factory-gate factory-nullboiler factory-nullwatch factory-nulltickets nullhub-exp nullboiler-factory 2>/dev/null || true'
 fleet_start='systemctl start forgejo; systemctl start factory-nulltickets factory-nullwatch factory-nullboiler factory-gate.timer nullhub-exp 2>/dev/null || true'
+# shellcheck disable=SC2016  # the loop runs in the VM, not here
 fleet_paths='for p in var/lib/forgejo var/lib/factory home/joel/.nullhub home/joel/factory/state home/joel/factory-hooks home/joel/.factory-pipeline; do [ -e "/$p" ] && echo "$p"; done'
 
 # restore <backup folder>: the forge and the factory's state come back from
@@ -209,6 +210,7 @@ restore() {
   vm_ssh root@127.0.0.1 "$fleet_stop"
   local rc=0
   vm_ssh root@127.0.0.1 'tar -C / -xzf -' <"$src/factory-state.tgz" || rc=$?
+  # shellcheck disable=SC2016  # the script runs in the VM, not here
   vm_ssh root@127.0.0.1 '
     [ -e /var/lib/forgejo ] && chown -R forgejo:forgejo /var/lib/forgejo
     for p in /var/lib/factory /home/joel/.nullhub /home/joel/factory /home/joel/factory-hooks /home/joel/.factory-pipeline; do
