@@ -4,13 +4,14 @@
 # The same address works on the Mac and inside the VM:
 #   web  http://127.0.0.1:3300
 #   git  ssh://forgejo@127.0.0.1:2222/<owner>/<repo>.git
-{ config, pkgs, ... }:
+{ config, pkgs, lib, ... }:
 let
   cfg = config.services.forgejo;
   forge = import ../../forgejo/declaration.nix; # port, admin, runner labels
   httpPort = forge.port; # forwarded to the Mac in vm/default.nix
   sshPort = 2222; # the port vm/factory-vm.sh forwards to the VM's sshd
   runnerToken = "${cfg.stateDir}/runner-token";
+  factoryTokens = "${cfg.stateDir}/factory-tokens";
 in
 {
   services.forgejo = {
@@ -45,7 +46,7 @@ in
     wantedBy = [ "multi-user.target" ];
     after = [ "forgejo.service" ];
     requires = [ "forgejo.service" ];
-    path = [ cfg.package pkgs.openssl ];
+    path = [ cfg.package pkgs.openssl pkgs.curl pkgs.jq ];
     environment = {
       USER = cfg.user;
       HOME = cfg.stateDir;
@@ -71,6 +72,46 @@ in
       # The build runner's registration token, read by the runner below.
       if [ ! -e ${runnerToken} ]; then
         printf 'TOKEN=%s\n' "$(forgejo actions generate-runner-token)" > ${runnerToken}
+      fi
+
+      # The factory's accounts (forgejo/declaration.nix): the personas and the
+      # gate's bot, each with a token generated here and never shown. The
+      # factory machine copies the tokens into the factory user's secrets
+      # (factory-forge-tokens in default.nix).
+      tokens=${factoryTokens}
+      mkdir -p "$tokens"
+      for account in ${lib.escapeShellArgs ([ forge.bot ] ++ forge.personas)}; do
+        if ! forgejo admin user list | awk '{print $2}' | grep -qx "$account"; then
+          forgejo admin user create --username "$account" --email "$account@factory.local" \
+            --password "$(openssl rand -hex 16)" --must-change-password=false
+        fi
+        if [ ! -s "$tokens/$account" ]; then
+          forgejo admin user generate-access-token --username "$account" --token-name factory --raw \
+            --scopes write:repository,write:issue,write:organization,write:user,read:misc > "$tokens/$account.new" \
+            && mv "$tokens/$account.new" "$tokens/$account"
+        fi
+      done
+      # The admin's own token, for the team below; stays here.
+      if [ ! -s "$tokens/_admin" ]; then
+        forgejo admin user generate-access-token --username ${forge.admin} --token-name factory-admin --raw \
+          --scopes write:organization,write:repository,write:user > "$tokens/_admin.new" && mv "$tokens/_admin.new" "$tokens/_admin"
+      fi
+
+      # The team `factory` with write on every repository of the org, holding
+      # the accounts. The org itself comes from forge-bootstrap (run from the
+      # Mac); until it exists this is skipped and done at the next start.
+      api() { curl -fsS -m 10 -H "Authorization: token $(cat "$tokens/_admin")" -H 'Content-Type: application/json' "$@"; }
+      base=http://127.0.0.1:${toString httpPort}/api/v1
+      if api "$base/orgs/${forge.org}" >/dev/null 2>&1; then
+        team=$(api "$base/orgs/${forge.org}/teams" | jq -r '.[] | select(.name == "factory") | .id')
+        if [ -z "$team" ]; then
+          team=$(api -X POST "$base/orgs/${forge.org}/teams" -d '{"name":"factory","description":"The factory: its personas and its gate","permission":"write","includes_all_repositories":true,"can_create_org_repo":false,"units":["repo.code","repo.issues","repo.pulls","repo.releases","repo.wiki","repo.projects","repo.actions"]}' | jq -r .id)
+        fi
+        for account in ${lib.escapeShellArgs ([ forge.bot ] ++ forge.personas)}; do
+          api -X PUT "$base/teams/$team/members/$account" >/dev/null 2>&1 || echo "forgejo-admin: could not add $account to the factory team" >&2
+        done
+      else
+        echo "forgejo-admin: no org ${forge.org} yet (forge-bootstrap); the factory team waits for the next start" >&2
       fi
     '';
   };
