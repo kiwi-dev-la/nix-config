@@ -18,7 +18,9 @@
       linux = [ "native:host" ];   # `runs-on: native`
     };
   };
-  # The runner every repo's CI job asks for. Every gate was written on the Mac.
+  # Every repo's CI runs one job per runner kind (the labels above: `macos`
+  # on the Mac, `native` on the factory VM). This one is the runner a person
+  # expects to see the gate on; the factory's merge needs the VM's job.
   ci.runsOn = "macos";
   # forge-seed copies these from github.com/<githubOrg>.
   githubOrg = "lightwave-media";

@@ -16,8 +16,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # One job per runner kind, as a release build runs on every platform: the
+  # Mac's runner (`macos`) and the factory VM's (`native`, Linux). Each runs
+  # the same gate. The factory's merge needs the VM's job green; the Mac's
+  # job blocks a merge when it fails, not when it has not run yet.
   ci:
-    runs-on: @RUNS_ON@
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [@RUNNERS@]
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     steps:
       # forge-ci is on every runner's PATH. It checks this commit out and runs

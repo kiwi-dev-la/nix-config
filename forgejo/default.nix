@@ -26,12 +26,13 @@ let
     };
   });
 
-  # The one workflow every repo carries, with the declared runner filled in.
+  # The one workflow every repo carries: one job per declared runner kind
+  # (the label before the colon: `macos`, `native`), as a matrix.
+  runnerKinds = map (label: builtins.head (lib.splitString ":" label)) (lib.concatLists (lib.attrValues forge.runner.labels));
   workflow =
-    assert lib.elem forge.ci.runsOn
-      (map (label: builtins.head (lib.splitString ":" label)) (lib.concatLists (lib.attrValues forge.runner.labels)));
+    assert lib.elem forge.ci.runsOn runnerKinds;
     pkgs.writeText "forge-ci-workflow.yml"
-      (builtins.replaceStrings [ "@RUNS_ON@" ] [ forge.ci.runsOn ] (builtins.readFile ./workflow.yml));
+      (builtins.replaceStrings [ "@RUNNERS@" ] [ (lib.concatStringsSep ", " runnerKinds) ] (builtins.readFile ./workflow.yml));
 
   # The one command that workflow runs. A runner puts it on its jobs' PATH.
   # The gate gets mise from here and everything else from the runner's host.
