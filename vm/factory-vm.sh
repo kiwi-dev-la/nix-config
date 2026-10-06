@@ -233,8 +233,27 @@ restore() {
     for p in /var/lib/factory /home/joel/.nullhub /home/joel/factory /home/joel/factory-hooks /home/joel/.factory-pipeline; do
       [ -e "$p" ] && chown -R joel:users "$p"
     done; true'
+  # A backup of the hand-run layout restored onto the module's: the tickets,
+  # the traces and the run records move to /var/lib/factory, and the
+  # clones, pipelines and workflow files are made again from the restored forge.
+  # shellcheck disable=SC2016  # runs in the VM
+  vm_ssh root@127.0.0.1 '
+    [ -d /var/lib/factory ] || exit 0
+    h=/home/joel/.nullhub/instances
+    if [ -f $h/nulltickets/nulltickets-1/nulltickets.db ]; then
+      install -o joel -g users -m 640 $h/nulltickets/nulltickets-1/nulltickets.db /var/lib/factory/nulltickets/nulltickets.db
+    fi
+    if [ -d $h/nullwatch/nullwatch-1/data ]; then
+      rm -rf /var/lib/factory/nullwatch/data && cp -a $h/nullwatch/nullwatch-1/data /var/lib/factory/nullwatch/data && chown -R joel:users /var/lib/factory/nullwatch
+    fi
+    st=/home/joel/factory/state
+    [ -f $st/runs.jsonl ] && install -o joel -g users -m 640 $st/runs.jsonl /var/lib/factory/runs.jsonl
+    for d in logs pending; do [ -d $st/$d ] && cp -a $st/$d/. /var/lib/factory/$d/ && chown -R joel:users /var/lib/factory/$d; done
+    true'
   vm_ssh root@127.0.0.1 "$fleet_start"
   ((rc == 0)) || die "the restore failed (exit $rc); the services are started again"
+  vm_ssh root@127.0.0.1 'systemctl list-unit-files factory-setup.service >/dev/null 2>&1 && systemctl restart factory-setup; true'
+
   say "restored from $src; secrets are not in a backup, place them with: factory-vm secret set <name>"
   status
 }
