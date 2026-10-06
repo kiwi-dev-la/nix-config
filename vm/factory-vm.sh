@@ -8,6 +8,7 @@ usage() {
   printf '%s\n' '  factory-vm ssh [..]  shell (or a command) in the VM as joel' >&2
   printf '%s\n' '  factory-vm switch [flake]   apply a configuration; default is the one this' >&2
   printf '%s\n' '                              command was built from, or e.g. github:kiwi-dev-la/nix-config' >&2
+  printf '%s\n' '  factory-vm watch     the live view: the factory tmux session, read-only, in this terminal' >&2
   printf '%s\n' '  factory-vm secret set <name>   store a secret in the VM, read from stdin (never from an argument)' >&2
   printf '%s\n' '  factory-vm secret list         which secrets the VM holds (names only)' >&2
   printf '%s\n' '  factory-vm backup [--disk]  copy the forge and the tickets to the NAS; with --disk,' >&2
@@ -240,6 +241,12 @@ case "${1:-}" in
   secret)
     shift
     secret "$@"
+    ;;
+  watch)
+    running || die "the VM is not running; run: factory-vm up"
+    # Read-only: keys go to the Mac's terminal, nothing is typed into the VM's windows.
+    exec ssh "${ssh_opts[@]}" -o StrictHostKeyChecking=yes -t joel@127.0.0.1 \
+      'tmux attach -r -t factory 2>/dev/null || echo "no factory session yet; it starts with the fleet"'
     ;;
   destroy)
     [[ ${2:-} == --yes ]] || die "this deletes the VM's disk; run: factory-vm destroy --yes"
