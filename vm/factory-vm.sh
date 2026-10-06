@@ -254,6 +254,10 @@ restore() {
     [ -f $st/runs.jsonl ] && install -o joel -g users -m 640 $st/runs.jsonl /var/lib/factory/runs.jsonl
     for d in logs pending; do [ -d $st/$d ] && cp -a $st/$d/. /var/lib/factory/$d/ && chown -R joel:users /var/lib/factory/$d; done
     true'
+  # The runner registered with the forge this VM had before; the restored
+  # forge does not know it. Without its registration file it registers again,
+  # with the restored forge's runner token.
+  vm_ssh root@127.0.0.1 'rm -f /var/lib/private/gitea-runner/*/.runner /var/lib/gitea-runner/*/.runner 2>/dev/null; systemctl reset-failed gitea-runner-factory 2>/dev/null; true'
   vm_ssh root@127.0.0.1 "$fleet_start"
   ((rc == 0)) || die "the restore failed (exit $rc); the services are started again"
   vm_ssh root@127.0.0.1 'systemctl list-unit-files factory-setup.service >/dev/null 2>&1 && systemctl restart factory-setup; true'
