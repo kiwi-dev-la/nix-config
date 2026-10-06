@@ -89,9 +89,12 @@ land() {
 login() {
   command -v factory-vm >/dev/null || die "no factory-vm on PATH"
   mkdir -p "$(dirname "$TOKEN_FILE")"
-  ( umask 077; factory-vm ssh "sudo cat /var/lib/forgejo/factory-tokens/$ACCOUNT" >"$TOKEN_FILE.new" ) &&
-    [ -s "$TOKEN_FILE.new" ] && mv "$TOKEN_FILE.new" "$TOKEN_FILE" ||
-    { rm -f "$TOKEN_FILE.new"; die "the VM has no token for $ACCOUNT (forgejo/declaration.nix operators)"; }
+  ( umask 077; factory-vm ssh "sudo cat /var/lib/forgejo/factory-tokens/$ACCOUNT" >"$TOKEN_FILE.new" ) || true
+  if [ ! -s "$TOKEN_FILE.new" ]; then
+    rm -f "$TOKEN_FILE.new"
+    die "the VM has no token for $ACCOUNT (forgejo/declaration.nix operators)"
+  fi
+  mv "$TOKEN_FILE.new" "$TOKEN_FILE"
   echo "signed in to $FORGE as $(api "$FORGE/api/v1/user" | jq -r .login)"
 }
 
