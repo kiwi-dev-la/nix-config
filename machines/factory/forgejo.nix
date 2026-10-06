@@ -7,7 +7,8 @@
 { config, pkgs, ... }:
 let
   cfg = config.services.forgejo;
-  httpPort = 3300; # forwarded to the Mac in vm/default.nix
+  forge = import ../../forgejo/declaration.nix; # port, admin, runner labels
+  httpPort = forge.port; # forwarded to the Mac in vm/default.nix
   sshPort = 2222; # the port vm/factory-vm.sh forwards to the VM's sshd
   runnerToken = "${cfg.stateDir}/runner-token";
 in
@@ -27,6 +28,8 @@ in
       session.COOKIE_SECURE = false;
       service.DISABLE_REGISTRATION = true;
       actions.ENABLED = true;
+      # http://127.0.0.1:3300/metrics, for Prometheus.
+      metrics.ENABLED = true;
     };
   };
 
@@ -61,7 +64,7 @@ in
       secret=${cfg.stateDir}/admin-password
       if [ ! -e "$secret" ]; then
         openssl rand -hex 16 > "$secret.new"
-        forgejo admin user create --admin --username joel --email joel@factory.local \
+        forgejo admin user create --admin --username ${forge.admin} --email ${forge.admin}@factory.local \
           --password "$(cat "$secret.new")" --must-change-password=false
         mv "$secret.new" "$secret"
       fi
@@ -82,7 +85,7 @@ in
       name = "factory";
       url = "http://127.0.0.1:${toString httpPort}";
       tokenFile = runnerToken;
-      labels = [ "native:host" ];
+      labels = forge.runner.labels.linux;
       hostPackages = with pkgs; [ bash coreutils curl gawk git gnused jq nix nodejs wget ];
     };
   };
