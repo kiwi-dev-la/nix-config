@@ -3,9 +3,10 @@
 #   factory-prove  use the running factory for real and fail if anything is broken
 { pkgs, flake }:
 let
+  forge = import ../forgejo/declaration.nix;
   # Mac port -> VM port. The Mac's own ports are left alone; SSH is 2222 -> 22.
   forwards = {
-    "3300" = 3300; # Forgejo web
+    "${toString forge.port}" = forge.port; # Forgejo web
   };
 
   # Only used to get a first boot with SSH; NixOS replaces it during `up`.
@@ -23,6 +24,9 @@ rec {
       nixos-anywhere
       openssh
       coreutils
+      findutils
+      gnugrep
+      sqlite
     ];
     runtimeEnv = {
       QEMU_SHARE = "${pkgs.qemu}/share/qemu";

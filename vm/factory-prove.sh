@@ -14,6 +14,7 @@ fail() { printf 'FAILED  %s\n' "$*" >&2; exit 1; }
 
 step "VM is running and healthy"
 state=$(factory-vm ssh systemctl is-system-running) || fail "systemd reports: $state"
+started=$(factory-vm ssh date +%s) # the VM's clock; the log check below starts here
 ok "$state"
 
 step "Forgejo answers its health check"
@@ -120,8 +121,8 @@ done
 ok
 
 step "No errors in Forgejo's log during this run"
-errors=$(factory-vm ssh "sudo journalctl -u forgejo --since '-5 min' -p err --no-pager -q | wc -l")
-[[ $errors == 0 ]] || fail "$errors error lines: factory-vm ssh sudo journalctl -u forgejo -p err"
+errors=$(factory-vm ssh "sudo journalctl -u forgejo --since @$started -p err --no-pager -q | wc -l")
+[[ $errors == 0 ]] || fail "$errors error lines: factory-vm ssh sudo journalctl -u forgejo -p err --since @$started"
 ok
 
 printf '\nAll steps passed. See %s/joel/%s\n' "$FORGE" "$name" >&2

@@ -8,6 +8,10 @@ usage() {
   printf '%s\n' '  factory-vm ssh [..]  shell (or a command) in the VM as joel' >&2
   printf '%s\n' '  factory-vm switch [flake]   apply a configuration; default is the one this' >&2
   printf '%s\n' '                              command was built from, or e.g. github:kiwi-dev-la/nix-config' >&2
+  printf '%s\n' '  factory-vm secret set <name>   store a secret in the VM, read from stdin (never from an argument)' >&2
+  printf '%s\n' '  factory-vm secret list         which secrets the VM holds (names only)' >&2
+  printf '%s\n' '  factory-vm backup [--disk]  copy the forge and the tickets to the NAS; with --disk,' >&2
+  printf '%s\n' '                              also the whole VM disk (the VM is stopped meanwhile)' >&2
   printf '%s\n' '  factory-vm stop      shut it down' >&2
   printf '%s\n' '  factory-vm destroy --yes    stop it and delete its disk' >&2
 }
@@ -18,6 +22,8 @@ SSH_PORT="${FACTORY_VM_SSH_PORT:-2222}"
 CPUS="${FACTORY_VM_CPUS:-8}"
 MEMORY="${FACTORY_VM_MEMORY:-16G}"
 DISK_SIZE="${FACTORY_VM_DISK:-200G}"
+# Where backups go: a folder on the NAS share the Mac already mounts.
+BACKUP_DIR="${FACTORY_BACKUP_DIR:-/Volumes/home/factory/backups}"
 # Mac port:VM port pairs, reachable on the Mac at 127.0.0.1 only. Set in vm/default.nix.
 read -r -a forwards <<<"${FACTORY_VM_FORWARDS:-$FORWARDS}"
 
@@ -156,6 +162,62 @@ switch() {
   vm_ssh root@127.0.0.1 nixos-rebuild switch --flake "$ref#factory"
 }
 
+# secret set <name>: the value comes in on stdin and lands in the VM as
+# /home/joel/.factory-secrets/<name>, mode 600. It is never an argument, so it
+# never shows in a process list or a shell history on either side.
+secret() {
+  running || die "the VM is not running; run: factory-vm up"
+  local name=${2:-}
+  case "${1:-}" in
+    set)
+      [[ $name =~ ^[a-z][a-z0-9-]*$ ]] || die "secret set needs a name like claude-token"
+      [[ ! -t 0 ]] || die "pipe the value in: <command that prints it> | factory-vm secret set $name"
+      vm_ssh joel@127.0.0.1 "umask 077 && mkdir -p ~/.factory-secrets && tr -d '\\n' >~/.factory-secrets/$name.tmp && [ -s ~/.factory-secrets/$name.tmp ] && mv ~/.factory-secrets/$name.tmp ~/.factory-secrets/$name" \
+        || die "nothing was stored for $name (empty input?)"
+      say "stored $name"
+      ;;
+    list) vm_ssh joel@127.0.0.1 'ls ~/.factory-secrets 2>/dev/null || true' ;;
+    *) die "run: factory-vm secret set <name>  or  factory-vm secret list" ;;
+  esac
+}
+
+# backup [--disk]: the Mac pulls the forge's data and the fleet's state out of
+# the VM into one archive on the NAS, with the services stopped for the few
+# seconds the archive takes, and checks the copy. --disk also copies the VM's
+# disk and firmware variables, which needs the VM stopped.
+backup() {
+  running || die "the VM is not running; run: factory-vm up"
+  [[ -d ${BACKUP_DIR%/*} ]] || die "the NAS share is not mounted at ${BACKUP_DIR%/*}"
+  local dest tmp
+  dest=$BACKUP_DIR/$(date +%Y%m%d-%H%M%S)
+  mkdir -p "$dest"
+  say "stopping the forge and the fleet for the archive"
+  vm_ssh root@127.0.0.1 'systemctl stop forgejo; systemctl stop nullhub-exp 2>/dev/null || true'
+  local rc=0
+  vm_ssh root@127.0.0.1 'tar -C / -czf - var/lib/forgejo home/joel/.nullhub home/joel/factory-hooks home/joel/.factory-pipeline 2>/dev/null' \
+    >"$dest/factory-state.tgz" || rc=$?
+  vm_ssh root@127.0.0.1 'systemctl start forgejo; systemctl start nullhub-exp 2>/dev/null || true'
+  ((rc == 0)) || die "the archive failed (exit $rc); the services are started again"
+  tar -tzf "$dest/factory-state.tgz" >"$dest/factory-state.list" || die "the archive does not list"
+  tmp=$(mktemp -d)
+  grep '\.db$' "$dest/factory-state.list" | xargs tar -xzf "$dest/factory-state.tgz" -C "$tmp" || die "could not read the database copies back"
+  local db ok=1
+  while IFS= read -r db; do
+    if [[ $(sqlite3 "$db" 'pragma integrity_check;') != ok ]]; then say "integrity check failed: ${db#"$tmp"/}"; ok=0; fi
+  done < <(find "$tmp" -name '*.db')
+  rm -rf "$tmp"
+  ((ok)) || die "a database copy is damaged"
+  (cd "$dest" && sha256sum factory-state.tgz >SHA256SUMS)
+  if [[ ${1:-} == --disk ]]; then
+    say "stopping the VM to copy its disk"
+    stop
+    cp "$STATE/disk.qcow2" "$dest/disk.qcow2"
+    cp "$STATE/efi-vars.fd" "$dest/efi-vars.fd"
+    start
+  fi
+  say "backup in $dest: $(du -sh "$dest" | cut -f1), $(wc -l <"$dest/factory-state.list") files archived, databases ok"
+}
+
 case "${1:-}" in
   up)
     if [[ ! -e $STATE/disk.qcow2 ]]; then create; else start; fi
@@ -171,6 +233,14 @@ case "${1:-}" in
     switch "$@"
     ;;
   stop) stop ;;
+  backup)
+    shift
+    backup "$@"
+    ;;
+  secret)
+    shift
+    secret "$@"
+    ;;
   destroy)
     [[ ${2:-} == --yes ]] || die "this deletes the VM's disk; run: factory-vm destroy --yes"
     stop
