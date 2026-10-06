@@ -11,6 +11,15 @@ These are enforced, not advisory. Every dev shell built from this repo puts
 `rules/git-guard.sh` in front of git, and it refuses the commands above and any
 commit or push carrying AI attribution. `nix flake check` proves each rule.
 
+## Memory
+
+`~/.lightwave/brain` is the memory every session shares. Read
+`memory/feedback/` before starting work. When Joel corrects a behaviour or
+asks you to remember something, write it there in the same turn
+(corrections and standing rules to `memory/feedback/`, facts and decisions to
+`knowledge/`, in each folder's own format) and say where it went. Never tell
+Joel you cannot remember.
+
 ## GitButler
 
 Branches, commits, pushes and pull requests are made with `but`; the installed
