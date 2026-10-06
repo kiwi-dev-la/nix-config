@@ -48,6 +48,32 @@ in
     '';
   };
 
+  # The GitHub Packages read token (`factory-vm secret set npm-token`), handed to
+  # the forge as the org's Actions secret NODE_AUTH_TOKEN, which the CI
+  # workflow passes to the gate. Runs when the secret is placed or changes.
+  systemd.services.factory-forge-secrets = {
+    description = "Factory: the org's CI secrets on the forge, from the factory's secrets";
+    after = [ "forgejo-admin.service" ];
+    requires = [ "forgejo-admin.service" ];
+    path = [ pkgs.curl pkgs.jq ];
+    serviceConfig.Type = "oneshot";
+    script = ''
+      token=${config.services.factory.secretsDir}/npm-token
+      admin=${config.services.forgejo.stateDir}/factory-tokens/_admin
+      [ -s "$token" ] && [ -s "$admin" ] || { echo "factory-forge-secrets: no npm-token yet"; exit 0; }
+      # Both values reach curl on stdin, never as an argument.
+      jq -Rn --rawfile t "$token" '{data: ($t | rtrimstr("\n"))}' |
+        curl -fsS -m 30 -X PUT -H @<(printf 'Authorization: token %s\n' "$(cat "$admin")") \
+          -H 'Content-Type: application/json' -d @- \
+          http://127.0.0.1:${toString forge.port}/api/v1/orgs/${forge.org}/actions/secrets/NODE_AUTH_TOKEN >/dev/null
+      echo "factory-forge-secrets: NODE_AUTH_TOKEN set for ${forge.org}"
+    '';
+  };
+  systemd.paths.factory-forge-secrets = {
+    wantedBy = [ "multi-user.target" ];
+    pathConfig.PathChanged = "${config.services.factory.secretsDir}/npm-token";
+  };
+
   networking.hostName = "factory";
   time.timeZone = "America/Los_Angeles";
 

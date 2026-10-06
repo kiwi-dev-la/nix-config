@@ -33,3 +33,7 @@ jobs:
       # has no such app yet.
       - name: gate
         run: forge-ci
+        env:
+          # Read-only access to the org's GitHub Packages (@lightwave-media/*),
+          # for the repos whose install needs it; empty where none is set.
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
