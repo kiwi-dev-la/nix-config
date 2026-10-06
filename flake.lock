@@ -45,16 +45,16 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1791312509,
-        "narHash": "sha256-SllZFIxafqx6mnntH8qhCddaig1jfNHtlGBETwowr2A=",
-        "ref": "refs/tags/factory-step5b",
-        "rev": "e9ef74db0dd78625880d3f292c64c872f9564104",
-        "revCount": 3770,
+        "lastModified": 1791312696,
+        "narHash": "sha256-pVjO9R8zwIiZx32CRInT/aqU1jPPBjVRIjNyjWtbkMM=",
+        "ref": "refs/tags/factory-step5c",
+        "rev": "2fdee46b6ef05c31e0ca228c677e46432fd9216f",
+        "revCount": 3772,
         "type": "git",
         "url": "ssh://git@github.com/lightwave-media/lightwave-ai"
       },
       "original": {
-        "ref": "refs/tags/factory-step5b",
+        "ref": "refs/tags/factory-step5c",
         "type": "git",
         "url": "ssh://git@github.com/lightwave-media/lightwave-ai"
       }
