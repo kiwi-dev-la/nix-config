@@ -41,7 +41,7 @@
             home-manager.useGlobalPkgs = true;
             home-manager.useUserPackages = true;
             home-manager.backupFileExtension = "hm-backup";
-            home-manager.extraSpecialArgs = { inherit lightwave-ai; };
+            home-manager.extraSpecialArgs = { inherit lightwave-ai; nixConfig = self; };
             home-manager.users.joelschaeffer = import ./home;
           }
         ];

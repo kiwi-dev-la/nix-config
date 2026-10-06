@@ -1,4 +1,4 @@
-{ config, pkgs, lib, lightwave-ai, ... }:
+{ config, pkgs, lib, lightwave-ai, nixConfig, ... }:
 
 {
   home.stateVersion = "26.11";
@@ -7,6 +7,14 @@
     # The rules in AGENTS.md, enforced: this `git` wins over the one
     # programs.git installs, in every shell and not only in dev shells.
     (lib.hiPrio (import ../rules/git-guard.nix { inherit pkgs lib; }))
+    # Driving the factory from this Mac: `factory` (tickets, status, landing
+    # on the forge; claude/factory) and `factory-vm` (the VM itself).
+    (pkgs.writeShellApplication {
+      name = "factory";
+      runtimeInputs = with pkgs; [ curl jq git coreutils gnused gnugrep ];
+      text = builtins.readFile ../claude/factory/factory.sh;
+    })
+    nixConfig.packages.${pkgs.stdenv.hostPlatform.system}.factory-vm
   ];
 
   # Claude Code, with the skills plugin the factory's workers use, pinned by
@@ -15,6 +23,8 @@
   programs.claude-code = {
     enable = true;
     plugins.mattpocock-skills = lightwave-ai.packages.${pkgs.stdenv.hostPlatform.system}.mattpocock-skills;
+    # How a session uses the factory: forge first, work as tickets (claude/factory).
+    plugins.factory = ../claude/factory;
   };
 
   # Where GitButler's installer puts `but` (README, bootstrap step 6).
