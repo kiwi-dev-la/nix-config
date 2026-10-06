@@ -154,4 +154,8 @@ in
     home = "/var/lib/gitea-runner";
   };
   users.groups.gitea-runner = { };
+  # The move out of /var/lib/private keeps the dynamic user's ownership
+  # (nobody), so the runner could not write its own cache; owned by the real
+  # user on every boot and switch.
+  systemd.tmpfiles.rules = [ "Z /var/lib/gitea-runner - gitea-runner gitea-runner -" ];
 }
