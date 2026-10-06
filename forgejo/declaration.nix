@@ -10,6 +10,11 @@
   # They form the team `factory` with write on every repository of the org.
   personas = [ "v_developer" "v_engineer" "v_staff-engineer" "v_cto" "jev" ];
   bot = "factory";
+  # Who drives the factory from outside it: Claude Code on the Mac, so its
+  # issues, merges and syncs carry its own name and not the owner's. Same
+  # team and token scopes as the personas; its token stays in the VM's token
+  # folder and is fetched by the Mac (`factory login`).
+  operators = [ "claude-code" ];
   runner = {
     capacity = 1;
     # What a workflow's `runs-on` asks for, by the kind of host the runner is on.
