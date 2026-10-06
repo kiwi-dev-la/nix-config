@@ -45,28 +45,38 @@ in
         [ -s "$src/$account" ] || continue
         install -m 600 -o ${config.services.factory.user} -g ${config.services.factory.group} "$src/$account" "$dest/forgejo-token.$account"
       done
+      # The package token, for workers installing @lightwave-media packages.
+      if [ -s "$src/_packages" ]; then
+        install -m 600 -o ${config.services.factory.user} -g ${config.services.factory.group} "$src/_packages" "$dest/forge-npm-token"
+      fi
     '';
   };
 
-  # The GitHub Packages read token (`factory-vm secret set npm-token`), handed to
-  # the forge as the org's Actions secret NODE_AUTH_TOKEN, which the CI
-  # workflow passes to the gate. Runs when the secret is placed or changes.
+  # The org's Actions secrets, from the factory's tokens: NODE_AUTH_TOKEN, the
+  # GitHub Packages read token (`factory-vm secret set npm-token`), while
+  # anything still installs from GitHub; FORGE_NPM_TOKEN, the forge's own
+  # package token (forgejo-admin). Runs at boot and when npm-token changes.
   systemd.services.factory-forge-secrets = {
     description = "Factory: the org's CI secrets on the forge, from the factory's secrets";
+    wantedBy = [ "multi-user.target" ];
     after = [ "forgejo-admin.service" ];
     requires = [ "forgejo-admin.service" ];
     path = [ pkgs.curl pkgs.jq ];
     serviceConfig.Type = "oneshot";
     script = ''
-      token=${config.services.factory.secretsDir}/npm-token
       admin=${config.services.forgejo.stateDir}/factory-tokens/_admin
-      [ -s "$token" ] && [ -s "$admin" ] || { echo "factory-forge-secrets: no npm-token yet"; exit 0; }
-      # Both values reach curl on stdin, never as an argument.
-      jq -Rn --rawfile t "$token" '{data: ($t | rtrimstr("\n"))}' |
-        curl -fsS -m 30 -X PUT -H @<(printf 'Authorization: token %s\n' "$(cat "$admin")") \
-          -H 'Content-Type: application/json' -d @- \
-          http://127.0.0.1:${toString forge.port}/api/v1/orgs/${forge.org}/actions/secrets/NODE_AUTH_TOKEN >/dev/null
-      echo "factory-forge-secrets: NODE_AUTH_TOKEN set for ${forge.org}"
+      [ -s "$admin" ] || { echo "factory-forge-secrets: no admin token yet"; exit 0; }
+      put() { # <name> <file>: the file's value as the org secret <name>
+        [ -s "$2" ] || { echo "factory-forge-secrets: no $1 yet"; return 0; }
+        # Both values reach curl on stdin, never as an argument.
+        jq -Rn --rawfile t "$2" '{data: ($t | rtrimstr("\n"))}' |
+          curl -fsS -m 30 -X PUT -H @<(printf 'Authorization: token %s\n' "$(cat "$admin")") \
+            -H 'Content-Type: application/json' -d @- \
+            http://127.0.0.1:${toString forge.port}/api/v1/orgs/${forge.org}/actions/secrets/"$1" >/dev/null
+        echo "factory-forge-secrets: $1 set for ${forge.org}"
+      }
+      put NODE_AUTH_TOKEN ${config.services.factory.secretsDir}/npm-token
+      put FORGE_NPM_TOKEN ${config.services.forgejo.stateDir}/factory-tokens/_packages
     '';
   };
   systemd.paths.factory-forge-secrets = {

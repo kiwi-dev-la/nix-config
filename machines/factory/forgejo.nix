@@ -104,6 +104,13 @@ in
           --scopes write:organization,write:repository,write:user > "$tokens/_admin.new" && mv "$tokens/_admin.new" "$tokens/_admin"
       fi
 
+      # The bot's package token: publishing and installing the org's packages
+      # (the org Actions secret FORGE_NPM_TOKEN, factory-forge-secrets).
+      if [ ! -s "$tokens/_packages" ]; then
+        forgejo admin user generate-access-token --username ${forge.bot} --token-name packages --raw \
+          --scopes write:package,read:repository > "$tokens/_packages.new" && mv "$tokens/_packages.new" "$tokens/_packages"
+      fi
+
       # The team `factory` with write on every repository of the org, holding
       # the accounts. The org itself comes from forge-bootstrap (run from the
       # Mac); until it exists this is skipped and done at the next start.
