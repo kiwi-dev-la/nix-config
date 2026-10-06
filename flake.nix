@@ -60,6 +60,27 @@
         // lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin
         (import ./vm { inherit pkgs; flake = self; }));
 
+      # The gate the forge's runner runs (forge-ci): the rules' proofs, and both
+      # machines' configurations evaluate. The Mac's is built only by a Mac runner.
+      apps = forEachSystem (pkgs: {
+        ci = {
+          type = "app";
+          program = lib.getExe (pkgs.writeShellApplication {
+            name = "nix-config-ci";
+            runtimeInputs = [ pkgs.nix pkgs.git ];
+            text = ''
+              cd "$(git rev-parse --show-toplevel)"
+              echo "▶ nix flake check"
+              nix flake check
+              echo "▶ the Mac's configuration evaluates"
+              nix eval --raw .#darwinConfigurations.Joels-MacBook-Pro.system.drvPath >/dev/null
+              echo "▶ the factory's configuration evaluates"
+              nix eval --raw .#nixosConfigurations.factory.config.system.build.toplevel.drvPath >/dev/null
+            '';
+          });
+        };
+      });
+
       # `nix develop ~/dev/nix-config#forgejo`: the forge's commands and this host's runner.
       devShells = forEachSystem (pkgs: {
         forgejo = (forge pkgs).shell;

@@ -1,0 +1,6 @@
+# Who approves a change, by path (regular expressions). Forgejo requests their
+# review on every pull request; the factory's gate does not merge one that
+# touches these paths without that owner's approval. `rules/` is also a
+# protected path on the forge: only an admin can merge a change to it.
+^rules/ @joel
+^(machines/factory|forgejo|vm)/ @claude-code

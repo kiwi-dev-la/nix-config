@@ -57,6 +57,7 @@ let
       FORGE_ORG=${forge.org}
       FORGE_ADMIN="''${FORGE_ADMIN:-${forge.admin}}"
       FORGE_GITHUB_ORG=${forge.githubOrg}
+      FORGE_GITHUB_SOURCES=${lib.escapeShellArg (lib.concatStringsSep " " (lib.mapAttrsToList (r: o: "${r}=${o}") (forge.githubSources or { })))}
       FORGE_REPOS=${lib.escapeShellArg (lib.concatStringsSep " " forge.repos)}
       FORGE_RUNNER_CONFIG=${runnerConfig}
       FORGE_WORKFLOW=${workflow}
