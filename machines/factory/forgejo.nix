@@ -46,7 +46,7 @@ in
     wantedBy = [ "multi-user.target" ];
     after = [ "forgejo.service" ];
     requires = [ "forgejo.service" ];
-    path = [ cfg.package pkgs.openssl pkgs.curl pkgs.jq ];
+    path = [ cfg.package pkgs.openssl pkgs.curl pkgs.jq pkgs.gawk ];
     environment = {
       USER = cfg.user;
       HOME = cfg.stateDir;
