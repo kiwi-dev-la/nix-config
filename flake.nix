@@ -72,6 +72,10 @@
               cd "$(git rev-parse --show-toplevel)"
               echo "▶ nix flake check"
               nix flake check
+              ${lib.concatMapStrings (name: ''
+                echo "▶ build packages.${pkgs.stdenv.hostPlatform.system}.${name}"
+                nix build --no-link ".#packages.${pkgs.stdenv.hostPlatform.system}.${name}"
+              '') (builtins.attrNames self.packages.${pkgs.stdenv.hostPlatform.system})}
               echo "▶ the Mac's configuration evaluates"
               nix eval --raw .#darwinConfigurations.Joels-MacBook-Pro.system.drvPath >/dev/null
               echo "▶ the factory's configuration evaluates"

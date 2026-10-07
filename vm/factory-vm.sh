@@ -223,10 +223,14 @@ sync_to_github() {
     trap 'rm -rf "$work"' EXIT
     forge="http://127.0.0.1:$port/$org/$repo.git"
     github="https://github.com/$gh_org/$repo.git"
-    export GIT_CONFIG_COUNT=3 GIT_CONFIG_KEY_0="http.http://127.0.0.1:$port/.extraHeader" GIT_CONFIG_VALUE_0="Authorization: token $token"
-    export GIT_CONFIG_KEY_1="credential.https://github.com.helper" GIT_CONFIG_VALUE_1=""
-    export GIT_CONFIG_KEY_2="credential.https://github.com.helper" GIT_CONFIG_VALUE_2="!gh auth git-credential"
-    g() { git -C "$work" "$@"; }
+    # The git config is set per command (in git's environment, not argv).
+    g() {
+      env GIT_CONFIG_COUNT=3 \
+        GIT_CONFIG_KEY_0="http.http://127.0.0.1:$port/.extraHeader" GIT_CONFIG_VALUE_0="Authorization: token $token" \
+        GIT_CONFIG_KEY_1="credential.https://github.com.helper" GIT_CONFIG_VALUE_1="" \
+        GIT_CONFIG_KEY_2="credential.https://github.com.helper" GIT_CONFIG_VALUE_2="!gh auth git-credential" \
+        git -C "$work" "$@"
+    }
     g init -q
     g fetch -q "$forge" "+refs/heads/main:refs/sync/forge" "+refs/tags/*:refs/tags/*" || die "could not fetch $org/$repo from the forge"
     g fetch -q "$github" "+refs/heads/main:refs/sync/github" || die "could not fetch $gh_org/$repo from GitHub"
