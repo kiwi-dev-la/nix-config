@@ -31,6 +31,58 @@
   githubOrg = "lightwave-media";
   # Repos whose GitHub copy lives under another owner than githubOrg.
   githubSources = { nix-config = "kiwi-dev-la"; };
+  # What the VM's forgejo-admin applies on every boot and switch, through the
+  # API with the admin token: it creates what is missing and puts back what a
+  # hand change moved, logging each correction.
+  policy = {
+    # Branch protection of every repository's main; `branchProtection` is the
+    # Forgejo API's own field names. `overrides.<repo>` replaces single fields.
+    branch = "main";
+    branchProtection = {
+      enable_push = true;
+      enable_push_whitelist = true;
+      push_whitelist_usernames = [ "joel" ];
+      enable_status_check = true;
+      status_check_contexts = [ "ci / ci (native) (pull_request)" ];
+      required_approvals = 0;
+    };
+    overrides = {
+      nix-config = {
+        required_approvals = 1;
+        enable_approvals_whitelist = true;
+        approvals_whitelist_username = [ "joel" "claude-code" "v_staff-engineer" ];
+        protected_file_patterns = "rules/**";
+        block_on_rejected_reviews = true;
+        dismiss_stale_approvals = true;
+      };
+    };
+    # Repository settings (PATCH /repos/{org}/{repo}).
+    settings = {
+      default_delete_branch_after_merge = true;
+      has_actions = true;
+    };
+    # Labels of the org (shared by every repository), and of each repository.
+    orgLabels = [
+      { name = "Kind/Bug"; color = "ee0701"; description = "Something is broken"; }
+      { name = "Kind/Feature"; color = "0288d1"; description = "New functionality"; }
+      { name = "Kind/Enhancement"; color = "84b6eb"; description = "Improve existing functionality"; }
+      { name = "Kind/Documentation"; color = "37474f"; description = "Documentation changes"; }
+      { name = "Kind/Security"; color = "e11d21"; description = "Security related"; }
+      { name = "Kind/Testing"; color = "795548"; description = "Tests"; }
+      { name = "Priority/Critical"; color = "e11d21"; description = "The highest priority"; }
+      { name = "Priority/High"; color = "ee9a00"; description = "High priority"; }
+      { name = "Priority/Medium"; color = "fbca04"; description = "Medium priority"; }
+      { name = "Priority/Low"; color = "0e8a16"; description = "Low priority"; }
+      { name = "Status/Blocked"; color = "880e4f"; description = "Waiting on something else"; }
+      { name = "Status/In Progress"; color = "1d76db"; description = "Being worked on"; }
+      { name = "Status/Need More Info"; color = "a2eeef"; description = "Feedback is required"; }
+      { name = "Status/Abandoned"; color = "cccccc"; description = "Will not be worked on"; }
+    ];
+    # The intake filter: the factory picks up issues carrying this label.
+    repoLabels = [
+      { name = "factory"; color = "5319e7"; description = "Taken by the factory"; }
+    ];
+  };
   repos = [
     "lightwave-core"
     "lightwave-cli"
