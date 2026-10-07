@@ -65,7 +65,7 @@ let
       # A C compiler: `go test -race` needs cgo.
       tools = pkgs: [ pkgs.go pkgs.gopls pkgs.golangci-lint pkgs.stdenv.cc ];
       gate = [ "test -z \"$(gofmt -l .)\"" "go vet ./..." "go test ./..." ];
-      # A GOROOT exported by another Go (mise, Homebrew) breaks Nix's Go.
+      # A GOROOT exported by another Go (Homebrew, a version manager) breaks Nix's Go.
       shellHook = "unset GOROOT";
     };
     rust = {
