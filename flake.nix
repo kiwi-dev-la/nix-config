@@ -84,6 +84,19 @@
       # `nix develop ~/dev/nix-config#forgejo`: the forge's commands and this host's runner.
       devShells = forEachSystem (pkgs: {
         forgejo = (forge pkgs).shell;
+
+        # `nix develop .#default`: what factory workers get in this repository.
+        default = pkgs.mkShell {
+          inputsFrom = [ (forge pkgs).shell ];
+          packages = [
+            (gitGuard pkgs)
+            pkgs.git
+            pkgs.jq
+            pkgs.curl
+            pkgs.shellcheck
+            pkgs.nixfmt
+          ];
+        };
       });
 
       # `nix flake check` proves each rule against a scratch repository.
