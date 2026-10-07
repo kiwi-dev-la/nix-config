@@ -35,7 +35,7 @@
         modules = [
           ./hosts/macbook-pro.nix
           ./hosts/hand-installed-apps.nix
-          ./forgejo/runner-agent.nix
+          ./forgejo/runner-daemon.nix
           home-manager.darwinModules.home-manager
           {
             home-manager.useGlobalPkgs = true;
