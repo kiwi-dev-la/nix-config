@@ -20,7 +20,14 @@ in
     forgeOwner = forge.org;
     # Every pull request the factory opens is reviewed by v_staff-engineer
     # (Claude Code) before it merges.
-    repos = map (name: { inherit name; workers = 2; review = true; }) forge.repos;
+    # Workers per repository: work comes in bursts on one repository at a time,
+    # so the busy ones get more. Not higher: a repository's workers share one
+    # GitButler clone, and more of them mean more same-file conflicts.
+    repos =
+      let
+        workers = { lightwave-ai = 5; nix-config = 3; };
+      in
+      map (name: { inherit name; workers = workers.${name} or 2; review = true; }) forge.repos;
     # The web page over the factory's services (nullhub embeds its dashboard).
     # Bound to 127.0.0.1 in the VM and not forwarded: it has no sign-in, so it
     # is reached through an ssh tunnel from the Mac only.
