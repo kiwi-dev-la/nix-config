@@ -131,13 +131,17 @@ A stamp is a commit in the forge. Repos that already carry the same file on
 GitHub arrive with it and are left alone; `forge-seed` stamps the rest.
 
 Two runners take jobs. The VM's own runs `runs-on: native` on Linux with Nix.
-The Mac's runs `runs-on: macos` on the Mac itself, as you.
+The Mac's runs `runs-on: macos` on the Mac itself, as its own user
+`_forgejo-runner` (no admin, no login shell, home `/var/lib/forgejo-runner`),
+so a job cannot read your home.
 
-The Mac's runner is a login service, declared in `forgejo/runner-agent.nix`.
-launchd starts it once `forge-bootstrap` has registered it, it waits for the
-forge when the VM is not up yet, and launchd restarts it if it stops. Its log
-is `~/Library/Logs/forge-runner.log`. `forge-runner-up` runs the same runner
-in the foreground.
+The Mac's runner is a launchd daemon, declared in `forgejo/runner-daemon.nix`:
+started at boot, restarted on failure, capacity and labels from the
+declaration. After the first `rebuild`, run `factory-vm runner-token` once: it
+fetches the forge's runner token from the VM (sudo, over a pipe) into the
+runner's home, and the runner registers itself. Its log is
+`/var/log/forgejo-runner.log` and starts with the user and home it runs as.
+`forge-runner-up` still runs a runner in the foreground, as you.
 
 A rebuilt VM is a new forge that knows neither this Mac's token nor its
 runner. Run `forge-bootstrap` with the password again; the runner picks up

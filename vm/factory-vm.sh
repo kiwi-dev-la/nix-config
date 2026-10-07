@@ -20,6 +20,7 @@ usage() {
   printf '%s\n' '  factory-vm backup [--disk]  copy the forge and the tickets to the NAS; with --disk,' >&2
   printf '%s\n' '                              also the whole VM disk (the VM is stopped meanwhile)' >&2
   printf '%s\n' '  factory-vm restore <backup folder>   put the forge and the tickets back from a backup' >&2
+  printf '%s\n' '  factory-vm runner-token   fetch the forge runner token from the VM for the Mac runner (sudo, once)' >&2
   printf '%s\n' '  factory-vm stop      shut it down' >&2
   printf '%s\n' '  factory-vm destroy --yes    stop it and delete its disk' >&2
   printf '%s\n' '  A second VM beside the first: FACTORY_VM_STATE=<dir> FACTORY_VM_SSH_PORT=2223' >&2
@@ -417,7 +418,23 @@ backup() {
   say "backup in $dest: $(du -sh "$dest" | cut -f1), $(wc -l <"$dest/factory-state.list") files archived, databases ok"
 }
 
+# runner-token: the forge's runner registration token goes from the VM to the
+# Mac runner's home (forgejo/runner-daemon.nix), readable by its user only. It
+# crosses on a pipe: never an argument, never a file of Joel's. The runner
+# registers itself with it when it starts; a registered runner needs it no more.
+runner_token() {
+  running || die "the VM is not running; run: factory-vm up"
+  local runner_user=_forgejo-runner dest=/var/lib/forgejo-runner/registration-token
+  id "$runner_user" >/dev/null 2>&1 || die "no user $runner_user; rebuild the Mac first"
+  vm_ssh root@127.0.0.1 cat /var/lib/forgejo/runner-token |
+    sudo sh -c 'umask 077 && cat >"$1" && chown "$2:$2" "$1"' sh "$dest" "$runner_user" ||
+    die "could not place the runner token"
+  sudo test -s "$dest" || die "the VM has no runner token"
+  say "runner token placed for $runner_user; the runner registers within a minute"
+}
+
 case "${1:-}" in
+  runner-token) runner_token ;;
   up)
     if [[ ! -e $STATE/disk.qcow2 ]]; then create; else start; fi
     status
