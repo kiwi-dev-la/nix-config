@@ -35,13 +35,11 @@ let
       (builtins.replaceStrings [ "@RUNNERS@" ] [ (lib.concatStringsSep ", " runnerKinds) ] (builtins.readFile ./workflow.yml));
 
   # The one command that workflow runs. A runner puts it on its jobs' PATH.
-  # The gate gets mise from here and everything else from the runner's host.
+  # The gate gets everything from the repo's flake and the runner's host.
   forge-ci = pkgs.writeShellApplication {
     name = "forge-ci";
-    runtimeInputs = [ pkgs.mise ];
     text = ''
       GIT=${pkgs.git}/bin/git
-      NO_GLOBAL_CONFIG=${pkgs.writeText "mise-global.toml" ""}
     '' + builtins.readFile ./forge-ci.sh;
   };
 

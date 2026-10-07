@@ -29,8 +29,8 @@ jobs:
     timeout-minutes: 60
     steps:
       # forge-ci is on every runner's PATH. It checks this commit out and runs
-      # the repo's gate: `nix run .#ci`, or `mise run ci` in a repo whose flake
-      # has no such app yet.
+      # the repo's gate: `nix run .#ci`. A repo whose flake has no
+      # `apps.<system>.ci` fails here with a message saying so.
       - name: gate
         run: forge-ci
         env:

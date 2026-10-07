@@ -34,42 +34,19 @@ echo "forge-ci: $GITHUB_REPOSITORY at $("$GIT" rev-parse --short HEAD) ($GITHUB_
 
 export CI=true
 
-# A repo's gate is `nix run .#ci` when its flake has that app.
-if [ -f flake.nix ]; then
-  command -v nix >/dev/null || {
-    echo "forge-ci: this repo has a flake.nix and the runner has no nix on its PATH" >&2
-    exit 1
-  }
-  system="$(nix eval --raw --impure --expr builtins.currentSystem)"
-  if nix eval --raw ".#apps.$system.ci.program" >/dev/null 2>&1; then
-    echo "forge-ci: the gate is nix run .#ci"
-    exec nix run .#ci
-  fi
-fi
-
-# A repo that has not moved there yet has the fleet's older gate, `mise run
-# ci`. It runs in the environment the repo declares: its flake's `ci` dev
-# shell, else its default one. With no flake it gets only what its mise.toml
-# installs and what the runner's host has.
-[ -f mise.toml ] || [ -f .mise.toml ] || {
-  echo "forge-ci: no gate here: neither a ci app in a flake nor a mise.toml" >&2
+# A repo's gate is `nix run .#ci`, and only that.
+[ -f flake.nix ] || {
+  echo "forge-ci: this repo has no flake.nix; its gate is the flake app apps.<system>.ci (nix run .#ci)" >&2
   exit 1
 }
-enter=()
-if [ -f flake.nix ]; then
-  for shell in ci default; do
-    if nix eval --raw ".#devShells.$system.$shell.drvPath" >/dev/null 2>&1; then
-      enter=(nix develop ".#$shell" --command)
-      echo "forge-ci: the gate is mise run ci, in the flake's $shell shell"
-      break
-    fi
-  done
-fi
-[ "${#enter[@]}" -gt 0 ] || echo "forge-ci: the gate is mise run ci, with the tools mise.toml installs and the runner's host has"
-
-# The gate sees the repo's own mise.toml and nothing from the account the
-# runner happens to run under.
-export MISE_YES=1
-export MISE_TRUSTED_CONFIG_PATHS="$PWD"
-export MISE_GLOBAL_CONFIG_FILE="$NO_GLOBAL_CONFIG"
-exec "${enter[@]}" sh -c 'mise install && exec mise run ci'
+command -v nix >/dev/null || {
+  echo "forge-ci: this repo has a flake.nix and the runner has no nix on its PATH" >&2
+  exit 1
+}
+system="$(nix eval --raw --impure --expr builtins.currentSystem)"
+nix eval --raw ".#apps.$system.ci.program" >/dev/null 2>&1 || {
+  echo "forge-ci: this repo's flake has no apps.$system.ci; its gate is nix run .#ci, so add that app" >&2
+  exit 1
+}
+echo "forge-ci: the gate is nix run .#ci"
+exec nix run .#ci
