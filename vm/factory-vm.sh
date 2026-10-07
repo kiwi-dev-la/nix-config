@@ -241,6 +241,21 @@ sync_to_github() {
     # No force: a tag that differs on GitHub is refused, not moved.
     g push -q "$github" refs/sync/forge:refs/heads/main "refs/tags/*:refs/tags/*" || die "$gh_org/$repo: GitHub refused the push"
     say "$gh_org/$repo: GitHub's main is the forge's $(g rev-parse --short refs/sync/forge)"
+    # Prune the copy's merged branches: not main, not the head of an open pull
+    # request, and no commit main lacks (main is now the forge's main).
+    open=$(gh pr list --repo "$gh_org/$repo" --state open --limit 200 --json headRefName --jq '.[].headRefName') || die "$gh_org/$repo: could not list its open pull requests; no branch was pruned"
+    g fetch -q "$github" "+refs/heads/*:refs/gh/*" || die "$gh_org/$repo: could not fetch its branches"
+    while read -r ref; do
+      b=${ref#refs/gh/}
+      [[ $b == main ]] && continue
+      grep -qxF -- "$b" <<<"$open" && continue
+      g merge-base --is-ancestor "$ref" refs/sync/forge || continue
+      if g push -q "$github" --delete "refs/heads/$b"; then
+        say "$gh_org/$repo: deleted merged branch $b"
+      else
+        say "$gh_org/$repo: could not delete branch $b"
+      fi
+    done < <(g for-each-ref --format='%(refname)' refs/gh/)
   )
 }
 
