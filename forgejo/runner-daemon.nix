@@ -14,7 +14,10 @@ let
   forgeCommands = import ./. { inherit pkgs lib gitGuard; };
 
   name = "_forgejo-runner";
-  id = 380;
+  # UID 400 is free on this Mac and clear of the Nix build users (300-399);
+  # the group keeps the GID 380 it already has.
+  uid = 400;
+  gid = 380;
   home = "/var/lib/forgejo-runner";
   log = "/var/log/forgejo-runner.log";
 
@@ -76,12 +79,11 @@ in
   users.knownUsers = [ name ];
   users.knownGroups = [ name ];
   users.groups.${name} = {
-    gid = id;
+    inherit gid;
     description = "Forgejo Actions runner";
   };
   users.users.${name} = {
-    uid = id;
-    gid = id;
+    inherit uid gid;
     inherit home;
     createHome = true;
     shell = "/usr/bin/false";
