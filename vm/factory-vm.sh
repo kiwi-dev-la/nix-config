@@ -12,6 +12,8 @@ usage() {
   printf '%s\n' '                              branch (committed state) of ~/dev/lightwave-ai: an unreleased build' >&2
   printf '%s\n' '  factory-vm sync <repo>   bring GitHub main into the forge main (fast-forward, or a merge that' >&2
   printf '%s\n' '                              keeps forge-only commits); nothing is pushed to GitHub' >&2
+  printf '%s\n' '  factory-vm sync --to-github <repo>   push the forge main (and tags) to the GitHub copy,' >&2
+  printf '%s\n' '                              fast-forward only; refused if GitHub has commits the forge lacks' >&2
   printf '%s\n' '  factory-vm watch     the live view: the factory tmux session, read-only, in this terminal' >&2
   printf '%s\n' '  factory-vm secret set <name>   store a secret in the VM, read from stdin (never from an argument)' >&2
   printf '%s\n' '  factory-vm secret list         which secrets the VM holds (names only)' >&2
@@ -195,16 +197,59 @@ forge_port() {
   echo 3300
 }
 
+# github_owner <repo>: who owns the repository's GitHub copy. GITHUB_ORG and
+# GITHUB_SOURCES ("repo=owner ...") come from forgejo/declaration.nix.
+github_owner() {
+  local pair
+  for pair in ${GITHUB_SOURCES:-}; do
+    [[ ${pair%%=*} == "$1" ]] && { echo "${pair#*=}"; return; }
+  done
+  echo "${FACTORY_GITHUB_ORG:-${GITHUB_ORG:-lightwave-media}}"
+}
+
+# sync_to_github <repo>: GitHub's main becomes the forge's main, fast-forward
+# only, with the forge's tags. GitHub is the distribution copy. It is reached
+# over HTTPS with the Mac's gh credentials, handed to git by gh's credential
+# helper, so no token is on a command line or in a file.
+sync_to_github() {
+  running || die "the VM is not running; run: factory-vm up"
+  local repo=${1:?usage: factory-vm sync --to-github <repo>} port token
+  local org=${FACTORY_FORGE_ORG:-lightwave-media} gh_org
+  gh_org=$(github_owner "$repo")
+  port=$(forge_port)
+  token=$(vm_ssh root@127.0.0.1 cat /var/lib/forgejo/factory-tokens/_admin) || die "the VM has no forge admin token"
+  (
+    work=$(mktemp -d)
+    trap 'rm -rf "$work"' EXIT
+    forge="http://127.0.0.1:$port/$org/$repo.git"
+    github="https://github.com/$gh_org/$repo.git"
+    export GIT_CONFIG_COUNT=3 GIT_CONFIG_KEY_0="http.http://127.0.0.1:$port/.extraHeader" GIT_CONFIG_VALUE_0="Authorization: token $token"
+    export GIT_CONFIG_KEY_1="credential.https://github.com.helper" GIT_CONFIG_VALUE_1=""
+    export GIT_CONFIG_KEY_2="credential.https://github.com.helper" GIT_CONFIG_VALUE_2="!gh auth git-credential"
+    g() { git -C "$work" "$@"; }
+    g init -q
+    g fetch -q "$forge" "+refs/heads/main:refs/sync/forge" "+refs/tags/*:refs/tags/*" || die "could not fetch $org/$repo from the forge"
+    g fetch -q "$github" "+refs/heads/main:refs/sync/github" || die "could not fetch $gh_org/$repo from GitHub"
+    if ! g merge-base --is-ancestor refs/sync/github refs/sync/forge; then
+      die "$gh_org/$repo: GitHub's main has commits the forge lacks; run: factory-vm sync $repo, then try again. Nothing was pushed."
+    fi
+    # No force: a tag that differs on GitHub is refused, not moved.
+    g push -q "$github" refs/sync/forge:refs/heads/main "refs/tags/*:refs/tags/*" || die "$gh_org/$repo: GitHub refused the push"
+    say "$gh_org/$repo: GitHub's main is the forge's $(g rev-parse --short refs/sync/forge)"
+  )
+}
+
 # sync <repo>: the forge's main gets GitHub's main. Work merged on GitHub
 # (by hand, before the factory took a repository over) would otherwise never
 # reach the forge, and the factory would build on an old main. A fast-forward
 # when the forge has nothing of its own; else a merge that keeps the forge's
 # commits (the CI workflow stamp, the factory's merges). The other direction
-# is the release step's: GitHub only receives what was proven.
+# is `sync --to-github`: GitHub only receives what was proven.
 sync() {
   running || die "the VM is not running; run: factory-vm up"
   local repo=${1:?usage: factory-vm sync <repo>} port token
-  local org=${FACTORY_FORGE_ORG:-lightwave-media} gh_org=${FACTORY_GITHUB_ORG:-lightwave-media}
+  local org=${FACTORY_FORGE_ORG:-lightwave-media} gh_org
+  gh_org=$(github_owner "$repo")
   port=$(forge_port)
   token=$(vm_ssh root@127.0.0.1 cat /var/lib/forgejo/factory-tokens/_admin) || die "the VM has no forge admin token"
   (
@@ -397,7 +442,12 @@ case "${1:-}" in
     ;;
   sync)
     shift
-    sync "$@"
+    if [[ ${1:-} == --to-github ]]; then
+      shift
+      sync_to_github "$@"
+    else
+      sync "$@"
+    fi
     ;;
   watch)
     running || die "the VM is not running; run: factory-vm up"
