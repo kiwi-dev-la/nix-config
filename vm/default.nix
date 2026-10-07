@@ -28,8 +28,14 @@ rec {
       gnugrep
       sqlite
       jq
+      git
+      gh
     ];
     runtimeEnv = {
+      GITHUB_ORG = forge.githubOrg;
+      GITHUB_SOURCES = pkgs.lib.concatStringsSep " " (
+        pkgs.lib.mapAttrsToList (r: o: "${r}=${o}") (forge.githubSources or { })
+      );
       QEMU_SHARE = "${pkgs.qemu}/share/qemu";
       DEBIAN_IMAGE = "${debianImage}";
       FLAKE = "${flake}";

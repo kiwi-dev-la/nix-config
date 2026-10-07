@@ -25,6 +25,7 @@ The `factory` command (installed by home-manager) does everything through the fo
 | `factory ci <repo> [ref]` | runs the forge's CI on a branch |
 | `factory land <repo> <branch>` | pushes a branch of `~/dev/<repo>` to the forge, opens its pull request, merges it when CI passes |
 | `factory sync <repo>` | brings GitHub's main into the forge's (until the forge is the only source) |
+| `factory-vm sync --to-github <repo>` | pushes the forge's main and tags to GitHub, fast-forward only; refuses if GitHub is ahead |
 | `factory login` | fetches this Mac's forge token from the VM once |
 
 ## Writing a ticket
