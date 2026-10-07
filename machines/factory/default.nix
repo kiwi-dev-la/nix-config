@@ -9,6 +9,7 @@ in
     (modulesPath + "/profiles/qemu-guest.nix")
     ./disk.nix
     ./forgejo.nix
+    ./forge-prune.nix
     lightwave-ai.nixosModules.factory
   ];
 
