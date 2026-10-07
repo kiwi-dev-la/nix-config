@@ -14,6 +14,14 @@ let
   sshPort = 2222; # the port vm/factory-vm.sh forwards to the VM's sshd
   runnerToken = "${cfg.stateDir}/runner-token";
   factoryTokens = "${cfg.stateDir}/factory-tokens";
+  # Settings as code: one JSON object per line, for the script's `while read`.
+  labelsFile = name: labels: pkgs.writeText "forge-${name}-labels" (lib.concatMapStrings (l: builtins.toJSON l + "\n") labels);
+  repoList = pkgs.writeText "forge-repos" (lib.concatMapStrings (r: r + "\n") forge.repos);
+  # Each repository's branch protection: the defaults, then its overrides.
+  protectionFile = pkgs.writeText "forge-protection.json" (builtins.toJSON (lib.genAttrs forge.repos (repo:
+    { rule_name = forge.policy.branch; branch_name = forge.policy.branch; }
+    // forge.policy.branchProtection
+    // (forge.policy.overrides.${repo} or { }))));
 in
 {
   services.forgejo = {
@@ -127,8 +135,69 @@ in
       else
         echo "forgejo-admin: no org ${forge.org} yet (forge-bootstrap); the factory team waits for the next start" >&2
       fi
+
+      # Settings as code (policy in forgejo/declaration.nix), applied on every
+      # start: create what is missing, put back what drifted, say what.
+      if api "$base/orgs/${forge.org}" >/dev/null 2>&1; then
+        # drift <what> <current-json> <wanted-json>: lists the wanted fields
+        # whose current value differs (arrays compared as sets); fails if none.
+        drift() {
+          jq -nr --argjson c "$2" --argjson w "$3" '
+            def norm: if type == "array" then sort else . end;
+            [$w | to_entries[] | select(($c[.key] | norm) != (.value | norm))
+              | "\(.key): \($c[.key] | tojson) -> \(.value | tojson)"] | join(", ") | select(. != "")' \
+          | { read -r d && echo "forgejo-admin: corrected $1: $d" >&2; }
+        }
+        # label <url-prefix> <existing-labels-json> <label-json>
+        label() {
+          id=$(jq -r --argjson l "$3" '.[] | select(.name == $l.name) | .id' <<<"$2")
+          if [ -z "$id" ]; then
+            api -X POST "$1" -d "$3" >/dev/null && echo "forgejo-admin: created label $(jq -r .name <<<"$3") at $1" >&2
+          else
+            cur=$(jq -c --argjson l "$3" '.[] | select(.name == $l.name)' <<<"$2")
+            if drift "label $(jq -r .name <<<"$3")" "$cur" "$3"; then
+              api -X PATCH "$1/$id" -d "$3" >/dev/null
+            fi
+          fi
+        }
+        existing=$(api "$base/orgs/${forge.org}/labels?limit=200")
+        while read -r l; do label "$base/orgs/${forge.org}/labels" "$existing" "$l"; done < ${labelsFile "org" forge.policy.orgLabels}
+
+        while read -r repo; do
+          r="$base/repos/${forge.org}/$repo"
+          if ! api "$r" >/dev/null 2>&1; then
+            echo "forgejo-admin: no repository $repo yet; its settings wait for the next start" >&2
+            continue
+          fi
+          current=$(api "$r")
+          if drift "settings of $repo" "$current" ${lib.escapeShellArg (builtins.toJSON forge.policy.settings)}; then
+            api -X PATCH "$r" -d ${lib.escapeShellArg (builtins.toJSON forge.policy.settings)} >/dev/null
+          fi
+
+          existing=$(api "$r/labels?limit=200")
+          while read -r l; do label "$r/labels" "$existing" "$l"; done < ${labelsFile "repo" forge.policy.repoLabels}
+
+          wanted=$(jq -c --arg repo "$repo" '.[$repo]' ${protectionFile})
+          code=$(curl -sS -m 10 -o "$tokens/.protection" -w '%{http_code}' -H "Authorization: token $(cat "$tokens/_admin")" "$r/branch_protections/${forge.policy.branch}")
+          if [ "$code" = 404 ]; then
+            api -X POST "$r/branch_protections" -d "$wanted" >/dev/null && echo "forgejo-admin: created branch protection of $repo" >&2
+          elif drift "branch protection of $repo" "$(cat "$tokens/.protection")" "$wanted"; then
+            api -X PATCH "$r/branch_protections/${forge.policy.branch}" -d "$wanted" >/dev/null
+          fi
+          rm -f "$tokens/.protection"
+        done < ${repoList}
+      fi
     '';
   };
+
+  # A switch that changes nothing in the unit above would leave the settings
+  # alone; restart it on every switch so a hand change is put back (the boot
+  # run is the unit's own start).
+  system.activationScripts.forgejo-admin-reapply = ''
+    if [ -d /run/systemd/system ] && ${pkgs.systemd}/bin/systemctl is-active --quiet forgejo-admin.service; then
+      ${pkgs.systemd}/bin/systemctl restart --no-block forgejo-admin.service || true
+    fi
+  '';
 
   # Forgejo Actions runner. Jobs with `runs-on: native` run directly on this
   # machine, with Nix available, so a workflow builds the same way a person
